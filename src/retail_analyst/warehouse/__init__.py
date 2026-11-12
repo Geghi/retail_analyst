@@ -1,7 +1,8 @@
+from .client import BigQueryClient, QueryResult, run_query
 from .errors import QueryFailed, QueryTooExpensive, WarehouseError, WarehouseUnavailable
-from .runner import QueryResult, run_query
 
 __all__ = [
+    "BigQueryClient",
     "QueryFailed",
     "QueryResult",
     "QueryTooExpensive",
