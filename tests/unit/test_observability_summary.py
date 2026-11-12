@@ -54,3 +54,38 @@ def test_module_main_prints_a_table(tmp_path):
         check=True,
     ).stdout
     assert "turns" in out and "bq" in out and "BadRequest" in out
+
+
+def test_summarize_adds_up_token_usage_over_all_model_calls(tmp_path):
+    log = tmp_path / "agent.jsonl"
+    rows = [
+        {"trace_id": "a", "event": "llm", "input_tokens": 100, "output_tokens": 20},
+        {"trace_id": "a", "event": "llm", "input_tokens": 50, "output_tokens": 10},
+        {"trace_id": "a", "event": "turn_finished", "outcome": "answered"},
+    ]
+    log.write_text("\n".join(json.dumps(r) for r in rows))
+
+    result = summarize(log)
+
+    assert result["tokens"] == {"calls": 2, "input": 150, "output": 30}
+
+
+def test_the_summary_table_shows_model_calls_and_tokens():
+    from retail_analyst.observability.__main__ import render
+
+    summary = {
+        "turns": 1,
+        "failure_rate": 0.0,
+        "refusals": 0,
+        "retries": 0,
+        "outcomes": {},
+        "steps": {},
+        "errors_by_type": {},
+        "tokens": {"calls": 2, "input": 150, "output": 30},
+    }
+
+    table = render(summary)
+
+    assert "model calls" in table and "2" in table
+    assert "tokens in" in table and "150" in table
+    assert "tokens out" in table and "30" in table

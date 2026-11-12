@@ -29,3 +29,14 @@ class TraceCallback(BaseCallbackHandler):
             node, begun = started
             duration_ms = round((time.perf_counter() - begun) * 1000, 1)
             self.turn.event(node, duration_ms=duration_ms, **fields)
+
+    def on_llm_end(self, response, **kwargs):
+        message = response.generations[0][0].message
+        usage = message.usage_metadata or {}
+        self.turn.event(
+            "llm",
+            model=message.response_metadata.get("model_name"),
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
+            total_tokens=usage.get("total_tokens", 0),
+        )

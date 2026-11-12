@@ -69,6 +69,15 @@ def _percentile(sorted_values: list[float], percent: int) -> float:
     return sorted_values[math.ceil(percent / 100 * len(sorted_values)) - 1]
 
 
+def _token_totals(events: list[dict]) -> dict[str, int]:
+    calls = [e for e in events if e.get("event") == "llm"]
+    return {
+        "calls": len(calls),
+        "input": sum(e.get("input_tokens", 0) for e in calls),
+        "output": sum(e.get("output_tokens", 0) for e in calls),
+    }
+
+
 def summarize(log_path: Path | None = None) -> dict[str, Any]:
     events = _load(log_path)
     finished = [e for e in events if e.get("event") == "turn_finished"]
@@ -90,6 +99,7 @@ def summarize(log_path: Path | None = None) -> dict[str, Any]:
     }
     turns = len(finished)
     return {
+        "tokens": _token_totals(events),
         "turns": turns,
         "outcomes": dict(outcomes),
         "failure_rate": outcomes["error"] / turns if turns else 0.0,
