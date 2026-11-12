@@ -255,6 +255,20 @@ Sending a report by email, for example, would use the same request-then-confirm 
 - **Scaling:** stateless instances, so scaling is by request count. BigQuery cost is controlled per query and per user.
 - **Cost levers:** a cheaper model for planning and routing, caching of repeated aggregate queries for a short time, and the byte cap.
 
+### Secrets and identity
+
+No credential file exists in production. Services prove who they are with the identity of the platform they run on.
+
+| What | How in production | Prototype |
+| ---- | ----------------- | --------- |
+| Google access (BigQuery, Vertex AI, Cloud SQL) | A dedicated service account attached to the Cloud Run service. The client libraries find it on their own, so there is no key file to store or leak. | The developer's own `gcloud` login, copied to `secrets/gcp.json` and mounted read-only |
+| Roles of that account | BigQuery Job User on the project, Data Viewer only on the authorized views, Vertex AI User, Cloud SQL Client. Nothing can write to the warehouse. | The developer's own permissions |
+| Values that must exist (third-party API keys, a database password if one is used) | Secret Manager, read by the service account at start-up or mounted by Cloud Run as an environment variable. Access is granted per secret, logged, and rotated without a deploy. | The local env file |
+| Database login | IAM database authentication, so there is no password | A throwaway password on a local container |
+| Build pipeline | Workload Identity Federation from the CI system, with service account key creation disabled by organization policy | Not applicable |
+
+An image never contains a secret: the build copies only code and configuration, and a check in the pipeline fails the build if a key pattern appears in the repository or the image.
+
 ## 8. Prototype and production
 
 | Part | Prototype | Production |
