@@ -68,7 +68,13 @@ def test_starting_the_cli_for_a_valid_user_greets_and_exits_cleanly():
     from retail_analyst.cli import main
 
     shown = []
-    env = {"GEMINI_API_KEY": "k", "GCP_PROJECT_ID": "p", "DATABASE_URL": URL}
+    env = {
+        "GEMINI_API_KEY": "k",
+        "GEMINI_MODEL": "main-model",
+        "GEMINI_FALLBACK_MODEL": "fallback-model",
+        "GCP_PROJECT_ID": "p",
+        "DATABASE_URL": URL,
+    }
 
     code = main(["--user", "alice"], env=env, read=lambda prompt: "exit", write=shown.append)
 
