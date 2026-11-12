@@ -1,3 +1,3 @@
-from .client import LlmUnavailable, build_model, generate
+from .client import LlmUnavailable, as_text, build_model, generate
 
-__all__ = ["LlmUnavailable", "build_model", "generate"]
+__all__ = ["LlmUnavailable", "as_text", "build_model", "generate"]

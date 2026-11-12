@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import uuid
 from collections.abc import Iterator
@@ -70,3 +71,7 @@ def start_turn(user_id: str, question: str, log_path: Path | None = None) -> Tur
     turn = Turn(user_id, resolve_log_path(log_path))
     turn.event("turn_started", question=question)
     return turn
+
+
+def verbose() -> bool:
+    return os.environ.get("TRACE_VERBOSE") == "1"

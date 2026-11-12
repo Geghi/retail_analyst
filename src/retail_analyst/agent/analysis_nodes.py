@@ -1,11 +1,11 @@
 from langgraph.graph import END
 
-from retail_analyst import knowledge
+from retail_analyst import knowledge, observability
 from retail_analyst.guardrails import GuardrailViolation, mask_rows, validate_sql
 from retail_analyst.warehouse import QueryFailed, QueryTooExpensive
 
 from .deps import AgentDeps
-from .limits import MAX_CORRECTIONS, MAX_QUERY_ROUNDS
+from .limits import MAX_CORRECTIONS, MAX_QUERY_ROUNDS, MAX_TRACED_ROWS
 from .prompts import analyst_prompt, analyst_system, planner_prompt, planner_system
 from .replies import ReplyFormatError, parse_json_reply
 from .state import AgentState
@@ -84,8 +84,10 @@ class AnalysisNodes:
             return None, self.failure(turn, sql, error.reason, blocked=False)
         except QueryTooExpensive as error:
             return None, self.failure(turn, sql, error.user_message, blocked=False)
-        turn.event("query", sql=safe_sql, ok=True, rows=len(result.rows))
-        return {"sql": sql, "rows": mask_rows(result.rows)}, None
+        rows = mask_rows(result.rows)
+        data = {"data": rows[:MAX_TRACED_ROWS]} if observability.verbose() else {}
+        turn.event("query", sql=safe_sql, ok=True, rows=len(rows), **data)
+        return {"sql": sql, "rows": rows}, None
 
     def failure(self, turn, sql: str, error: str, blocked: bool) -> dict:
         turn.event("query", sql=sql, ok=False, blocked=blocked, error=error)

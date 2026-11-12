@@ -2,7 +2,8 @@ import time
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from retail_analyst import settings
+from retail_analyst import observability, settings
+from retail_analyst.llm import as_text
 
 
 class TraceCallback(BaseCallbackHandler):
@@ -32,11 +33,17 @@ class TraceCallback(BaseCallbackHandler):
             duration_ms = round((time.perf_counter() - begun) * 1000, 1)
             self.turn.event(node, duration_ms=duration_ms, **fields)
 
+    def on_chat_model_start(self, serialized, messages, **kwargs):
+        if observability.verbose():
+            prompt = "\n\n".join(as_text(m.content) for m in messages[0])
+            self.turn.event("llm_input", prompt=prompt)
+
     def on_llm_end(self, response, **kwargs):
         message = response.generations[0][0].message
         usage = message.usage_metadata or {}
         model = message.response_metadata.get("model_name")
         input_tokens, output_tokens = usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+        text = {"output": as_text(message.content)} if observability.verbose() else {}
         self.turn.event(
             "llm",
             model=model,
@@ -44,4 +51,5 @@ class TraceCallback(BaseCallbackHandler):
             output_tokens=output_tokens,
             total_tokens=usage.get("total_tokens", 0),
             cost_usd=settings.cost_usd(model, input_tokens, output_tokens),
+            **text,
         )

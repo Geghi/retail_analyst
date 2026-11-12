@@ -1,4 +1,4 @@
 from .reader import format_trace, read_trace, summarize
-from .turn import Turn, start_turn
+from .turn import Turn, start_turn, verbose
 
-__all__ = ["Turn", "format_trace", "read_trace", "start_turn", "summarize"]
+__all__ = ["Turn", "format_trace", "read_trace", "start_turn", "summarize", "verbose"]
