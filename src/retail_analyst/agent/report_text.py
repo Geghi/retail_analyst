@@ -8,12 +8,8 @@ YES = {"yes", "y", "confirm", "ok", "okay", "sure", "si", "sì"}
 NO = {"no", "n", "cancel", "stop", "abort"}
 
 
-def report_title(body: str) -> str:
-    for line in body.splitlines():
-        title = line.strip().lstrip("#").strip()
-        if title:
-            return title[:80]
-    return "Report"
+def report_title(question: str) -> str:
+    return " ".join(question.split())[:80] or "Report"
 
 
 def normalize_answer(text: str) -> str:

@@ -62,6 +62,7 @@ def test_save_stores_the_last_report_for_the_user_and_conversation(conn, tmp_pat
     stored = list_reports(conn, user)
     assert saved.kind == "answer"
     assert [r.body for r in stored] == ["# Q1 report\nJeans lead."]
+    assert [r.title for r in stored] == ["Create a Q1 report"]
     assert stored[0].conversation_id == agent.conversation_id
 
 

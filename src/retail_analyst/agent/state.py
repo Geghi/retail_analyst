@@ -1,13 +1,11 @@
 from typing import TypedDict
 
-from retail_analyst.guardrails import UserScope
-
 
 class AgentState(TypedDict, total=False):
     user_id: str
     conversation_id: str
     question: str
-    scope: UserScope
+    last_question: str
     persona: str
     today: str
     trios_text: str

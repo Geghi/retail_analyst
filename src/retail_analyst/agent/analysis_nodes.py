@@ -26,7 +26,6 @@ class AnalysisNodes:
     def load_context(self, state: AgentState) -> dict:
         similar = self.deps.find_similar(state["question"])
         return {
-            "scope": self.deps.load_scope(state["user_id"]),
             "persona": self.deps.load_persona(),
             "today": self.deps.today().isoformat(),
             "trios_text": knowledge.format_for_prompt(similar) if similar else "none",
@@ -63,7 +62,8 @@ class AnalysisNodes:
 
     def run_queries(self, state: AgentState, config) -> dict:
         turn = config["configurable"]["turn"]
-        attempts = [self.attempt(sql, state["scope"], turn) for sql in state["queries"]]
+        scope = self.deps.load_scope(state["user_id"])
+        attempts = [self.attempt(sql, scope, turn) for sql in state["queries"]]
         failures = [failure for _, failure in attempts if failure]
         if failures:
             return {"feedback": failures, "corrections": state.get("corrections", 0) + 1}
@@ -113,6 +113,7 @@ class AnalysisNodes:
         rounds = state.get("rounds", 0) + 1
         more = bool(follow_ups) and rounds < MAX_QUERY_ROUNDS
         update = {"answer": answer, "last_answer": answer, "outcome": "answered"}
+        update["last_question"] = state["question"]
         update.update({"rounds": rounds, "more": more})
         if more:
             update.update({"queries": follow_ups, "corrections": 0, "feedback": []})

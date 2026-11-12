@@ -29,7 +29,11 @@ class ReportNodes:
         if not body:
             return {"answer": NOTHING_TO_SAVE, "outcome": "answered"}
         saved = reports.save_report(
-            self.deps.conn, state["user_id"], report_title(body), body, state["conversation_id"]
+            self.deps.conn,
+            state["user_id"],
+            report_title(state.get("last_question", "")),
+            body,
+            state["conversation_id"],
         )
         return {"answer": f'Saved the report "{saved.title}".', "outcome": "answered"}
 
