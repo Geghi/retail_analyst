@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 from google.api_core import exceptions as gexc
+from google.cloud import bigquery
 
 from retail_analyst.warehouse import (
     QueryFailed,
@@ -41,10 +42,6 @@ class FakeClient:
         return FakeJob(self.rows, self.bytes_processed, error)
 
 
-def no_sleep(_):
-    pass
-
-
 def test_a_dry_run_over_the_cap_refuses_to_execute():
     client = FakeClient(bytes_processed=5_000)
     with pytest.raises(QueryTooExpensive) as info:
@@ -77,25 +74,28 @@ def test_the_cap_defaults_to_one_billion_bytes(monkeypatch):
         gexc.DeadlineExceeded("x"),
     ],
 )
-def test_transient_errors_are_retried_with_backoff_then_raise_unavailable(error):
+def test_transient_errors_raise_unavailable_after_exactly_one_attempt(error):
     client = FakeClient(errors=[error] * 10)
-    sleeps = []
     with pytest.raises(WarehouseUnavailable) as info:
-        run_query("SELECT 1", client=client, max_retries=3, sleep=sleeps.append)
-    assert client.calls.count(False) == 4
-    assert sleeps == sorted(sleeps) and len(set(sleeps)) == 3
+        run_query("SELECT 1", client=client)
+    assert client.calls.count(False) == 1
     assert info.value.user_message
 
 
-def test_a_transient_error_that_clears_is_recovered():
-    client = FakeClient(rows=[{"n": 1}], errors=[gexc.ServiceUnavailable("x")])
-    assert run_query("SELECT 1", client=client, sleep=no_sleep).rows == [{"n": 1}]
+def test_a_failure_building_the_default_client_is_a_safe_warehouse_error(monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError("no creds in /home/secret/key.json")
+
+    monkeypatch.setattr(bigquery, "Client", broken)
+    with pytest.raises(WarehouseError) as info:
+        run_query("SELECT 1")
+    assert "secret" not in info.value.user_message
 
 
-def test_a_bad_request_is_not_retried_and_carries_a_truncated_reason():
+def test_a_bad_request_carries_a_truncated_reason():
     client = FakeClient(errors=[gexc.BadRequest("Unrecognized name: foo " + "x" * 800)])
     with pytest.raises(QueryFailed) as info:
-        run_query("SELECT foo", client=client, sleep=no_sleep)
+        run_query("SELECT foo", client=client)
     assert client.calls.count(False) == 1
     assert info.value.reason.startswith("Unrecognized name: foo")
     assert len(info.value.reason) <= 500

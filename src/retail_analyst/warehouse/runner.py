@@ -1,6 +1,5 @@
 import datetime as dt
 import os
-import time
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -11,7 +10,6 @@ from google.cloud import bigquery
 from .errors import QueryFailed, QueryTooExpensive, WarehouseError, WarehouseUnavailable
 
 DEFAULT_MAX_BYTES_BILLED = 1_000_000_000
-BASE_DELAY_SECONDS = 1.0
 TRANSIENT = (
     gexc.ServiceUnavailable,
     gexc.InternalServerError,
@@ -54,22 +52,14 @@ def _cap(max_bytes_billed: int | None) -> int:
     return int(os.environ.get("BQ_MAX_BYTES_BILLED", DEFAULT_MAX_BYTES_BILLED))
 
 
-def _execute(client, sql: str, cap: int, max_rows: int, max_retries: int, sleep) -> QueryResult:
-    for attempt in range(max_retries + 1):
-        try:
-            config = bigquery.QueryJobConfig(maximum_bytes_billed=cap)
-            job = client.query(sql, job_config=config)
-            rows = []
-            for row in job.result():
-                rows.append(_row(row))
-                if len(rows) == max_rows:
-                    break
-            return QueryResult(rows, job.total_bytes_processed or 0, not rows)
-        except TRANSIENT:
-            if attempt == max_retries:
-                raise
-            sleep(BASE_DELAY_SECONDS * 2**attempt)
-    raise AssertionError("unreachable")
+def _execute(client, sql: str, cap: int, max_rows: int) -> QueryResult:
+    job = client.query(sql, job_config=bigquery.QueryJobConfig(maximum_bytes_billed=cap))
+    rows = []
+    for row in job.result():
+        rows.append(_row(row))
+        if len(rows) == max_rows:
+            break
+    return QueryResult(rows, job.total_bytes_processed or 0, not rows)
 
 
 def run_query(
@@ -77,19 +67,17 @@ def run_query(
     *,
     client=None,
     max_bytes_billed: int | None = None,
-    max_retries: int = 3,
     max_rows: int = 1000,
-    sleep=time.sleep,
 ) -> QueryResult:
-    client = client or _client()
-    cap = _cap(max_bytes_billed)
     try:
+        client = client or _client()
+        cap = _cap(max_bytes_billed)
         dry = client.query(sql, job_config=bigquery.QueryJobConfig(dry_run=True))
         if (dry.total_bytes_processed or 0) > cap:
             raise QueryTooExpensive(
                 "This question would scan too much data. Try narrowing the date range or columns."
             )
-        return _execute(client, sql, cap, max_rows, max_retries, sleep)
+        return _execute(client, sql, cap, max_rows)
     except WarehouseError:
         raise
     except gexc.BadRequest as error:
@@ -98,5 +86,5 @@ def run_query(
         raise WarehouseUnavailable(
             "The data warehouse is temporarily unavailable. Please try again shortly."
         ) from error
-    except gexc.GoogleAPICallError as error:
+    except Exception as error:
         raise WarehouseError("The data warehouse returned an error.") from error
