@@ -14,7 +14,7 @@ How to work in this repo. Linked from [CLAUDE.md](../../CLAUDE.md).
 ## Layout
 
 ```
-src/retail_analyst/  agent package (CLI, agent loop, tools, guardrails, BigQuery, stores)
+src/retail_analyst/  agent package; each folder is a module, imported through its __init__.py only
 golden/              synthetic Golden Knowledge trios (question, SQL, report)
 config/              users and product scopes, persona text (editable without redeploy)
 tests/               unit, integration, acceptance

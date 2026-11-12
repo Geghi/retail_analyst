@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+*.json
+.venv/
+.git/
+.claude/
+.agents/
+.scratch/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+logs/

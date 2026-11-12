@@ -8,7 +8,7 @@ All CLI commands for this repo.
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 pre-commit install
-cp .env.example <your-local-env-file>
+cp .env.example .env
 gcloud auth application-default login
 ```
 

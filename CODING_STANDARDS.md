@@ -47,3 +47,13 @@ Tools receive the authenticated `user_id` from the CLI session, not from model-g
 Tool and service failures are turned into a typed error with a user-safe message; the original exception goes to the log with the trace id.
 
 **Why:** raw errors leak SQL, project ids and credentials, and crash the chat loop.
+
+## Modules expose an index; others import only the index
+
+Each folder under `src/retail_analyst/` is a module, and its `__init__.py` is its public interface.
+Code outside a module imports from `retail_analyst.<module>` only, never from a file inside it (`retail_analyst.<module>.<file>`).
+Inside a module, files import each other freely.
+Check: `tests/unit/test_architecture.py::test_modules_import_each_other_via_index_only`.
+
+**Why:** a module's internals can then change without touching its callers, and the guardrails stay behind one small interface.
+**Example:** `retail_analyst.guardrails` exports `validate_sql`; the agent never imports `retail_analyst.guardrails.sql_validator`.
