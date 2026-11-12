@@ -37,10 +37,10 @@ docker compose run --rm app --user alice
 docker compose run --rm --entrypoint python app -m retail_analyst.observability
 ```
 
-The container reads the env file at run time (nothing secret is in the image) and mounts the
-`secrets/` folder read-only: copy your Google credentials to `secrets/gcp.json` once
-(macOS/Linux: `cp ~/.config/gcloud/application_default_credentials.json secrets/gcp.json`;
-Windows PowerShell: `copy $env:APPDATA\gcloud\application_default_credentials.json secrets\gcp.json`).
+The container reads the env file at run time (nothing secret is in the image) and mounts,
+read-only, the credentials file named by `GOOGLE_APPLICATION_CREDENTIALS` in that env file:
+the full path on your computer, e.g. the one `gcloud auth application-default login` prints
+(`Credentials saved to file: [...]`). Docker stops with a message if it is empty.
 Traces are written to `./logs` and exports to `./exports`.
 
 ## Lint and complexity

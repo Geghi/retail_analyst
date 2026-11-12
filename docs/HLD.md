@@ -261,7 +261,7 @@ No credential file exists in production. Services prove who they are with the id
 
 | What | How in production | Prototype |
 | ---- | ----------------- | --------- |
-| Google access (BigQuery, Vertex AI, Cloud SQL) | A dedicated service account attached to the Cloud Run service. The client libraries find it on their own, so there is no key file to store or leak. | The developer's own `gcloud` login, copied to `secrets/gcp.json` and mounted read-only |
+| Google access (BigQuery, Vertex AI, Cloud SQL) | A dedicated service account attached to the Cloud Run service. The client libraries find it on their own, so there is no key file to store or leak. | The developer's own `gcloud` login (found automatically when run locally, mounted read-only into the container in Docker) |
 | Roles of that account | BigQuery Job User on the project, Data Viewer only on the authorized views, Vertex AI User, Cloud SQL Client. Nothing can write to the warehouse. | The developer's own permissions |
 | Values that must exist (third-party API keys, a database password if one is used) | Secret Manager, read by the service account at start-up or mounted by Cloud Run as an environment variable. Access is granted per secret, logged, and rotated without a deploy. | The local env file |
 | Database login | IAM database authentication, so there is no password | A throwaway password on a local container |

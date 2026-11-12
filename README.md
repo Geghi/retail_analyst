@@ -48,24 +48,29 @@ docker compose up -d db         # Postgres for saved reports
 python -m retail_analyst.cli --user alice
 ```
 
-### Run it in Docker instead
+### Run it in Docker instead (optional)
 
 No local Python is needed, and it works the same on Linux, macOS and Windows (Docker Desktop).
-The image holds no secrets: the env file is read at run time and your Google credentials are read from the `secrets/` folder of the project, which git ignores.
+The image holds no secrets: the env file is read at run time and your Google credentials are mounted read-only.
 
-Copy your credentials there once, then run:
+The local run above needs nothing beyond `gcloud auth application-default login`. A container cannot see that login, so for Docker you also tell it which file to use:
 
-| System | Copy the credentials |
-| ------ | -------------------- |
-| macOS, Linux | `cp ~/.config/gcloud/application_default_credentials.json secrets/gcp.json` |
-| Windows (PowerShell) | `copy $env:APPDATA\gcloud\application_default_credentials.json secrets\gcp.json` |
+1. Run `gcloud auth application-default login`. It ends with a line like `Credentials saved to file: [...]`.
+2. Put that full path in `.env` (a service-account key file works too):
 
-A service-account key file works too: save it as `secrets/gcp.json`.
+   | System | Typical path |
+   | ------ | ------------ |
+   | Linux, macOS | `GOOGLE_APPLICATION_CREDENTIALS=/home/you/.config/gcloud/application_default_credentials.json` |
+   | Windows | `GOOGLE_APPLICATION_CREDENTIALS=C:/Users/you/AppData/Roaming/gcloud/application_default_credentials.json` |
+
+3. Run:
 
 ```bash
 docker compose build app
 docker compose run --rm app --user alice
 ```
+
+If the variable is empty, Docker stops at once and says so. Use an absolute path (no `~`), and make sure the file exists: Docker would otherwise create an empty folder with that name.
 
 > **Windows without Docker:** activate the environment with `.venv\Scripts\activate` and copy the env file with `copy .env.example .env`. The other commands are the same.
 

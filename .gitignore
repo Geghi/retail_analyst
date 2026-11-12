@@ -244,5 +244,3 @@ Thumbs.db
 
 exports/
 treehouse.toml
-secrets/*
-!secrets/.gitkeep
