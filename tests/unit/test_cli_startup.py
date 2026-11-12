@@ -2,6 +2,8 @@ from retail_analyst.cli import main
 
 GOOD_ENV = {
     "GEMINI_API_KEY": "key",
+    "GEMINI_MODEL": "main-model",
+    "GEMINI_FALLBACK_MODEL": "fallback-model",
     "GCP_PROJECT_ID": "project",
     "DATABASE_URL": "postgresql://analyst:analyst@localhost:5432/analyst",
 }
@@ -48,3 +50,12 @@ def test_an_unreachable_database_tells_how_to_start_it():
 
     assert code == 1
     assert "docker compose up -d db" in output
+
+
+def test_a_missing_fallback_model_is_named_in_a_plain_message():
+    env = {key: value for key, value in GOOD_ENV.items() if key != "GEMINI_FALLBACK_MODEL"}
+
+    code, output = run(["--user", "alice"], env)
+
+    assert code == 1
+    assert "GEMINI_FALLBACK_MODEL" in output

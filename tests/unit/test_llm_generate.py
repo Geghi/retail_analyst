@@ -60,6 +60,12 @@ def test_config_reaches_the_model_callbacks():
     assert handler.started == 1
 
 
+@pytest.fixture(autouse=True)
+def model_names(monkeypatch):
+    monkeypatch.setenv("GEMINI_MODEL", "main-model")
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "fallback-model")
+
+
 def test_build_model_uses_environment_models(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", SECRET)
     monkeypatch.setenv("GEMINI_MODEL", "env-main")
@@ -69,13 +75,12 @@ def test_build_model_uses_environment_models(monkeypatch):
     assert [f.model for f in model.fallbacks] == ["env-fallback"]
 
 
-def test_build_model_defaults(monkeypatch):
+def test_build_model_has_no_hardcoded_model_names(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", SECRET)
-    monkeypatch.delenv("GEMINI_MODEL", raising=False)
     monkeypatch.delenv("GEMINI_FALLBACK_MODEL", raising=False)
-    model = build_model()
-    assert model.runnable.model == "gemini-3.6-flash"
-    assert [f.model for f in model.fallbacks] == ["gemini-3.5-flash"]
+    monkeypatch.setenv("GEMINI_MODEL", "env-main")
+    with pytest.raises(KeyError, match="GEMINI_FALLBACK_MODEL"):
+        build_model()
 
 
 def test_build_model_is_cached(monkeypatch):

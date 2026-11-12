@@ -10,7 +10,13 @@ from retail_analyst.agent import Agent, AgentDeps
 
 from .chat import run_chat
 
-REQUIRED_ENV = ("GEMINI_API_KEY", "GCP_PROJECT_ID", "DATABASE_URL")
+REQUIRED_ENV = (
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
+    "GEMINI_FALLBACK_MODEL",
+    "GCP_PROJECT_ID",
+    "DATABASE_URL",
+)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

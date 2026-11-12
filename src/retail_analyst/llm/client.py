@@ -4,8 +4,6 @@ from langchain_core.exceptions import ModelRateLimitError
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-DEFAULT_MODEL = "gemini-3.6-flash"
-DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash"
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_TIMEOUT_SECONDS = 20
 SAFE_MESSAGE = "The AI service is temporarily unavailable. Please try again later."
@@ -24,8 +22,8 @@ class LlmUnavailable(Exception):
 def build_model():
     api_key = os.environ.get("GEMINI_API_KEY", "")
     names = (
-        os.environ.get("GEMINI_MODEL", DEFAULT_MODEL),
-        os.environ.get("GEMINI_FALLBACK_MODEL", DEFAULT_FALLBACK_MODEL),
+        os.environ["GEMINI_MODEL"],
+        os.environ["GEMINI_FALLBACK_MODEL"],
     )
     max_retries = int(os.environ.get("LLM_MAX_RETRIES", DEFAULT_MAX_RETRIES))
     timeout = float(os.environ.get("LLM_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS))
