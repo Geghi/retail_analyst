@@ -69,12 +69,13 @@ def _percentile(sorted_values: list[float], percent: int) -> float:
     return sorted_values[math.ceil(percent / 100 * len(sorted_values)) - 1]
 
 
-def _token_totals(events: list[dict]) -> dict[str, int]:
+def _token_totals(events: list[dict]) -> dict[str, float]:
     calls = [e for e in events if e.get("event") == "llm"]
     return {
         "calls": len(calls),
         "input": sum(e.get("input_tokens", 0) for e in calls),
         "output": sum(e.get("output_tokens", 0) for e in calls),
+        "cost_usd": round(sum(e.get("cost_usd") or 0 for e in calls), 6),
     }
 
 

@@ -67,7 +67,7 @@ def test_summarize_adds_up_token_usage_over_all_model_calls(tmp_path):
 
     result = summarize(log)
 
-    assert result["tokens"] == {"calls": 2, "input": 150, "output": 30}
+    assert result["tokens"] == {"calls": 2, "input": 150, "output": 30, "cost_usd": 0}
 
 
 def test_the_summary_table_shows_model_calls_and_tokens():
@@ -81,7 +81,7 @@ def test_the_summary_table_shows_model_calls_and_tokens():
         "outcomes": {},
         "steps": {},
         "errors_by_type": {},
-        "tokens": {"calls": 2, "input": 150, "output": 30},
+        "tokens": {"calls": 2, "input": 150, "output": 30, "cost_usd": 0.0},
     }
 
     table = render(summary)
@@ -89,3 +89,15 @@ def test_the_summary_table_shows_model_calls_and_tokens():
     assert "model calls" in table and "2" in table
     assert "tokens in" in table and "150" in table
     assert "tokens out" in table and "30" in table
+
+
+def test_summarize_adds_up_the_cost_of_priced_model_calls(tmp_path):
+    log = tmp_path / "agent.jsonl"
+    rows = [
+        {"trace_id": "a", "event": "llm", "cost_usd": 0.002},
+        {"trace_id": "a", "event": "llm", "cost_usd": None},
+        {"trace_id": "a", "event": "llm", "cost_usd": 0.001},
+    ]
+    log.write_text("\n".join(json.dumps(r) for r in rows))
+
+    assert summarize(log)["tokens"]["cost_usd"] == 0.003

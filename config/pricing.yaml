@@ -1,0 +1,6 @@
+# USD per 1M tokens. Verify against https://ai.google.dev/gemini-api/docs/pricing.
+# A model missing here is logged with cost_usd null: the cost is never guessed.
+models:
+  gemini-3.5-flash:
+    input_per_million: 1.50
+    output_per_million: 9.00

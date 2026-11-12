@@ -2,6 +2,8 @@ import time
 
 from langchain_core.callbacks import BaseCallbackHandler
 
+from retail_analyst import settings
+
 
 class TraceCallback(BaseCallbackHandler):
     def __init__(self, turn):
@@ -33,10 +35,13 @@ class TraceCallback(BaseCallbackHandler):
     def on_llm_end(self, response, **kwargs):
         message = response.generations[0][0].message
         usage = message.usage_metadata or {}
+        model = message.response_metadata.get("model_name")
+        input_tokens, output_tokens = usage.get("input_tokens", 0), usage.get("output_tokens", 0)
         self.turn.event(
             "llm",
-            model=message.response_metadata.get("model_name"),
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             total_tokens=usage.get("total_tokens", 0),
+            cost_usd=settings.cost_usd(model, input_tokens, output_tokens),
         )

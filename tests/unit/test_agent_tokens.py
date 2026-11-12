@@ -1,3 +1,4 @@
+import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -31,3 +32,17 @@ def test_every_model_call_is_traced_with_its_token_usage(tmp_path):
     assert event["input_tokens"] == 120
     assert event["output_tokens"] == 30
     assert event["total_tokens"] == 150
+
+
+def test_the_model_call_event_carries_its_cost_when_the_model_has_a_price(tmp_path, monkeypatch):
+    (tmp_path / "pricing.yaml").write_text(
+        "models:\n  gemini-test:\n    input_per_million: 1.0\n    output_per_million: 10.0\n"
+    )
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    log = tmp_path / "trace.jsonl"
+    turn = start_turn("alice", "question", log)
+
+    UsageModel().invoke("hello", config={"callbacks": [TraceCallback(turn)]})
+
+    (event,) = [e for e in read_trace(turn.trace_id, log) if e["event"] == "llm"]
+    assert event["cost_usd"] == pytest.approx((120 * 1.0 + 30 * 10.0) / 1_000_000)

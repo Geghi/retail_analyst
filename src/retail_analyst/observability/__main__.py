@@ -10,6 +10,7 @@ def render(summary: dict) -> str:
         f"{'model calls':<20}{summary['tokens']['calls']}",
         f"{'tokens in':<20}{summary['tokens']['input']}",
         f"{'tokens out':<20}{summary['tokens']['output']}",
+        f"{'cost (USD)':<20}{summary['tokens']['cost_usd']:.4f}",
         "",
         "outcomes",
         *[f"  {name:<18}{count}" for name, count in summary["outcomes"].items()],

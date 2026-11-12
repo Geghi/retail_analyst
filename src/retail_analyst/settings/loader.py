@@ -45,3 +45,18 @@ def list_users(path: Path | None = None) -> list[str]:
 
 def load_persona(path: Path | None = None) -> str:
     return (path or config_dir() / "persona.md").read_text()
+
+
+def cost_usd(
+    model: str | None, input_tokens: int, output_tokens: int, path: Path | None = None
+) -> float | None:
+    path = path or config_dir() / "pricing.yaml"
+    try:
+        prices = yaml.safe_load(path.read_text())["models"].get(model)
+    except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError):
+        return None
+    if not prices:
+        return None
+    return (
+        input_tokens * prices["input_per_million"] + output_tokens * prices["output_per_million"]
+    ) / 1_000_000
