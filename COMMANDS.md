@@ -27,6 +27,20 @@ python -m retail_analyst.cli --user alice   # alice, bob or carol
 
 In the chat: `/trace` shows the steps of the last answer, `/reports` lists your saved reports, `exit` quits.
 
+## Chat in Docker
+
+No local Python needed; only the env file and Google credentials.
+
+```bash
+docker compose build app
+docker compose run --rm app --user alice
+docker compose run --rm --entrypoint python app -m retail_analyst.observability
+```
+
+The container reads the env file at run time (nothing secret is in the image) and mounts
+`GOOGLE_APPLICATION_CREDENTIALS` (default: your `gcloud` application-default credentials)
+read-only. Traces are written to `./logs`.
+
 ## Lint and complexity
 
 ```bash

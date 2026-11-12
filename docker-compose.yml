@@ -9,5 +9,28 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analyst -d analyst"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  app:
+    build: .
+    profiles: ["app"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://analyst:analyst@db:5432/analyst
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp.json
+    volumes:
+      # Credentials stay outside the image, mounted read-only at run time.
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-${HOME}/.config/gcloud/application_default_credentials.json}:/secrets/gcp.json:ro
+      - ./logs:/app/logs
+    stdin_open: true
+    tty: true
+
 volumes:
   pgdata:
