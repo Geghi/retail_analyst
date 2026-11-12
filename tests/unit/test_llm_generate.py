@@ -74,8 +74,8 @@ def test_build_model_defaults(monkeypatch):
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
     monkeypatch.delenv("GEMINI_FALLBACK_MODEL", raising=False)
     model = build_model()
-    assert model.runnable.model == "gemini-3.8-flash"
-    assert [f.model for f in model.fallbacks] == ["gemini-3.7-flash"]
+    assert model.runnable.model == "gemini-3.6-flash"
+    assert [f.model for f in model.fallbacks] == ["gemini-3.5-flash"]
 
 
 def test_build_model_is_cached(monkeypatch):

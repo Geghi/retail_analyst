@@ -3,8 +3,8 @@ import os
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-DEFAULT_MODEL = "gemini-3.8-flash"
-DEFAULT_FALLBACK_MODEL = "gemini-3.7-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
+DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash"
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_TIMEOUT_SECONDS = 20
 SAFE_MESSAGE = "The AI service is temporarily unavailable. Please try again later."
