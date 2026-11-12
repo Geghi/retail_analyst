@@ -5,7 +5,7 @@ L'agente sceglie il livello, al massimo tre prove, proporzionali al cambio.
 
 ## Come si avvia e si testa
 
-- Avvio in locale: TBD, the CLI does not exist yet (see [COMMANDS.md](../../COMMANDS.md) once it does)
+- Avvio in locale: `python -m retail_analyst.cli --user alice` dopo `docker compose up -d db` (dettagli in [COMMANDS.md](../../COMMANDS.md))
 - Unit: `pytest tests/unit`
 - Integrazione: `pytest tests/integration`
 - Acceptance live: `pytest tests/acceptance -m integration`

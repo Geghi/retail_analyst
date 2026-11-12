@@ -9,7 +9,6 @@ How to work in this repo. Linked from [CLAUDE.md](../../CLAUDE.md).
   symbol, file or route that no longer exists. Only `docs/adr/` and `docs/prd/`
   keep history.
 - **Prose docs** — one sentence per line (`CONTEXT.md`, map cards, `docs/agents/`), so parallel branches rebase without conflicts.
-- **Stale deps** — the post-checkout / post-rewrite hook re-runs the install when a lockfile changed; after a rebase never "fix" a gate failure by hand before it has run.
 
 ## Layout
 
@@ -19,7 +18,6 @@ golden/              synthetic Golden Knowledge trios (question, SQL, report)
 config/              users and product scopes, persona text (editable without redeploy)
 tests/               unit, integration, acceptance
 docs/                HLD, architecture diagram, assumptions, ADRs, PRDs, agent docs
-scripts/             sync-deps.sh
 .scratch/            task files: todo, in-progress, done
 ```
 

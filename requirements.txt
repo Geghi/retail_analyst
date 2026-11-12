@@ -1,12 +1,9 @@
-google-genai
-google-cloud-bigquery
-db-dtypes
-pandas
-sqlglot
-psycopg[binary]
-pyyaml
-python-dotenv
-langgraph
-langchain-core
-langchain-google-genai
+google-cloud-bigquery==3.47.0
+langchain-core==1.8.0
+langchain-google-genai==4.5.0
+langgraph==1.2.20
+psycopg[binary]==3.3.9
+python-dotenv==1.2.4
+PyYAML==6.0.3
+sqlglot==30.31.0
 -e .

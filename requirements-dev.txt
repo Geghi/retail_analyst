@@ -1,5 +1,5 @@
 -r requirements.txt
-pytest
-ruff
-complexipy
+pytest==9.2.0
+ruff==0.17.4
+complexipy==8.3.0
 pre-commit
