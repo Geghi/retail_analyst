@@ -14,3 +14,28 @@ def test_the_analyst_must_describe_the_direction_of_each_change_as_the_numbers_s
     system = analyst_system("persona", "2026-11-12")
 
     assert "rose or fell" in system
+
+
+def test_the_analyst_is_told_when_a_result_was_cut_to_the_first_rows():
+    from retail_analyst.agent.prompts import analyst_prompt
+
+    rows = [{"brand": f"b{i}"} for i in range(120)]
+
+    prompt = analyst_prompt("by brand?", [{"sql": "SELECT brand", "rows": rows}])
+
+    assert 'rows_shown="50"' in prompt
+    assert 'rows_total="120"' in prompt
+
+
+def test_the_analyst_must_say_which_part_of_the_question_it_could_not_answer():
+    from retail_analyst.agent.prompts import analyst_system
+
+    system = analyst_system("persona", "2026-11-12")
+
+    assert "say which part" in system
+
+
+def test_the_planner_limits_breakdowns_with_many_values_to_the_top_ones():
+    system = planner_system("2026-11-12", "none")
+
+    assert "ORDER BY" in system and "LIMIT 10" in system
