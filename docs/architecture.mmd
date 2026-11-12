@@ -5,37 +5,50 @@ flowchart LR
 
   UI -->|"HTTPS + identity token"| GW["API gateway: auth, rate limit, user id"]
 
-  subgraph Agent["Agent service - Cloud Run, stateless"]
-    ORCH["Orchestrator loop"]
-    INSAFE["Input safety: scope and injection check"]
-    PLAN["Gemini call 1: plan and write SQL"]
-    GR["Guardrails: read-only, PII block, product scope"]
-    ANA["Gemini call 2: analyze and write report"]
-    MASK["Result masking"]
-    RTOOLS["Report tools: save, request delete, confirm delete"]
-    LLMC["LLM client: retries and fallback model"]
-    WH["Warehouse client: dry run cost cap, retries"]
+  subgraph Agent["Agent service - LangGraph state graph, Cloud Run, stateless"]
+    LOAD["load_context: user scope, persona, similar trios"]
+    PLAN["plan: Gemini call 1, intent and SQL as JSON"]
+    RUN["run_queries: guardrails, product scope, cost cap, execute, mask"]
+    ANA["analyze: Gemini call 2, answer and optional follow-up queries"]
+    DIRECT["direct reply: schema question or greeting"]
+    REFUSE["refuse: off-topic or personal data"]
+    SAVE["save_report"]
+    REQDEL["request_delete: list matching reports"]
+    CONFIRM["confirm: graph pauses until the user answers yes or no"]
+    GIVEUP["give_up: friendly message after the correction limit"]
+    CKPT["Checkpointer: one thread per conversation"]
+    LLMC["Gemini client: timeout, retries, fallback model"]
+    BQC["BigQueryClient: dry-run byte cap, typed errors, JSON rows"]
   end
 
-  GW --> ORCH
-  ORCH --> INSAFE --> PLAN
-  PLAN --> GR --> WH
-  WH --> MASK --> ANA --> ORCH
-  ORCH --> RTOOLS
+  GW --> LOAD --> PLAN
+  PLAN -->|"analysis"| RUN
+  PLAN -->|"schema question, greeting"| DIRECT
+  PLAN -->|"other"| REFUSE
+  PLAN -->|"save report"| SAVE
+  PLAN -->|"delete reports"| REQDEL --> CONFIRM
+  RUN -->|"rows"| ANA
+  RUN -->|"error: up to 2 corrections"| PLAN
+  RUN -->|"limit reached"| GIVEUP
+  ANA -->|"follow-up queries: up to 3 rounds"| RUN
   PLAN -. uses .-> LLMC
   ANA -. uses .-> LLMC
   LLMC --> GEM["Gemini - Vertex AI"]
-  WH --> BQ[("BigQuery: thelook_ecommerce, read-only service account")]
+  RUN -->|"retried 3 times if the warehouse is unavailable"| BQC
+  BQC --> BQ[("BigQuery: thelook_ecommerce, read-only service account")]
+  CONFIRM -.-> CKPT
 
   subgraph Data["State"]
-    PG[("Cloud SQL Postgres + pgvector: reports, pending deletions, preferences, knowledge index")]
+    PG[("Cloud SQL Postgres + pgvector: reports, pending deletions, checkpoints, preferences, knowledge index")]
     GCS[("Cloud Storage: Golden bucket, versioned trios")]
-    CFG[("Config store: persona text, metric definitions, user scopes")]
+    CFG[("Config store: persona text, metric definitions, user scopes, prices")]
   end
 
-  ORCH -->|"top 3 similar trios"| PG
-  RTOOLS --> PG
-  ORCH -->|"read at every turn"| CFG
+  LOAD -->|"top 3 similar trios"| PG
+  SAVE --> PG
+  CONFIRM -->|"confirmed: soft delete"| PG
+  CKPT --> PG
+  LOAD -->|"read at every turn"| CFG
   GCS -->|"ingestion job: validate, embed, index"| PG
 
   subgraph Learn["Learning loop - offline"]
@@ -45,8 +58,8 @@ flowchart LR
     REV --> GCS
   end
 
-  ORCH --> OBS["OpenTelemetry traces, metrics, logs"]
-  OBS --> LF["Langfuse: LLM traces, cost, evals"]
+  Agent --> OBS["OpenTelemetry traces, metrics, logs"]
+  OBS --> LF["Langfuse: LLM traces, tokens, cost, evals"]
   OBS --> MON["Cloud Monitoring: alerts, dashboards"]
   OBS --> FB
 
