@@ -40,7 +40,7 @@ docker compose run --rm --entrypoint python app -m retail_analyst.observability
 The container reads the env file at run time (nothing secret is in the image) and mounts,
 read-only, the credentials file named by `GOOGLE_APPLICATION_CREDENTIALS` in that env file:
 the full path on your computer, e.g. the one `gcloud auth application-default login` prints
-(`Credentials saved to file: [...]`). Docker stops with a message if it is empty.
+(`Credentials saved to file: [...]`). If it is empty, the app stops with a message naming it.
 Traces are written to `./logs` and exports to `./exports`.
 
 ## Lint and complexity

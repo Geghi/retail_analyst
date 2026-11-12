@@ -27,8 +27,9 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp.json
     volumes:
       # Credentials stay outside the image: the file named by GOOGLE_APPLICATION_CREDENTIALS
-      # in the env file (full path on the host), mounted read-only.
-      - ${GOOGLE_APPLICATION_CREDENTIALS:?Set GOOGLE_APPLICATION_CREDENTIALS in .env to the full path of your credentials file}:/secrets/gcp.json:ro
+      # in the env file (full path on the host), mounted read-only. Without it an empty
+      # placeholder is mounted, so `docker compose up -d db` works and the app explains what is missing.
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./docker/no-credentials}:/secrets/gcp.json:ro
       - ./logs:/app/logs
       - ./exports:/app/exports
     stdin_open: true

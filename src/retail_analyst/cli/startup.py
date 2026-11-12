@@ -57,9 +57,9 @@ def missing_setup(env: Mapping[str, str]) -> str | None:
         if not env.get(name):
             return f"{name} is not set. Copy .env.example to .env and fill it in."
     credentials = env.get("GOOGLE_APPLICATION_CREDENTIALS")
-    if credentials and not Path(credentials).is_file():
+    if credentials and not (Path(credentials).is_file() and Path(credentials).stat().st_size):
         return (
-            f"GOOGLE_APPLICATION_CREDENTIALS points to a file that does not exist: {credentials}\n"
+            f"GOOGLE_APPLICATION_CREDENTIALS points to a missing or empty file: {credentials}\n"
             "In Docker, set GOOGLE_APPLICATION_CREDENTIALS in the env file to the full path of a "
             "credentials file on your computer (see the README)."
         )

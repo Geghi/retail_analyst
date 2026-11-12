@@ -60,3 +60,14 @@ def test_a_missing_fallback_model_is_named_in_a_plain_message():
 
     assert code == 1
     assert "GEMINI_FALLBACK_MODEL" in output
+
+
+def test_an_empty_credentials_file_is_reported_like_a_missing_one(tmp_path):
+    empty = tmp_path / "gcp.json"
+    empty.write_text("")
+    env = {**GOOD_ENV, "GOOGLE_APPLICATION_CREDENTIALS": str(empty)}
+
+    code, output = run(["--user", "alice"], env)
+
+    assert code == 1
+    assert "full path" in output

@@ -97,7 +97,7 @@ docker compose build app
 docker compose run --rm app --user alice
 ```
 
-If the variable is empty, Docker stops at once and says so. Use an absolute path (no `~`), and make sure the file exists: Docker would otherwise create an empty folder with that name.
+If the variable is empty, the app starts and stops with a message naming it. Use an absolute path (no `~`), and make sure the file exists: Docker would otherwise create an empty folder with that name.
 
 ### Users
 
