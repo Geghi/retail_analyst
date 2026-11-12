@@ -35,10 +35,31 @@ An executive asks a question, the agent writes the SQL, runs it, and explains th
 
 **You need:** Python 3.12+, Docker, the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey), and a Google Cloud project id.
 
-```bash
-git clone https://github.com/Geghi/retail_analyst.git && cd retail_analyst
+**1. Get the code and create the environment.** This is the only step that differs by system.
 
-python3 -m venv .venv && source .venv/bin/activate
+*macOS and Linux*
+
+```bash
+git clone https://github.com/Geghi/retail_analyst.git
+cd retail_analyst
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+*Windows (PowerShell)*
+
+```powershell
+git clone https://github.com/Geghi/retail_analyst.git
+cd retail_analyst
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+If PowerShell refuses to run the activation script, run `Set-ExecutionPolicy -Scope Process Bypass` once in that window and try again.
+
+**2. Everything else is the same on every system.**
+
+```bash
 pip install -r requirements.txt
 
 cp .env.example .env            # then set GEMINI_API_KEY and GCP_PROJECT_ID
@@ -47,6 +68,8 @@ gcloud auth application-default login
 docker compose up -d db         # Postgres for saved reports
 python -m retail_analyst.cli --user alice
 ```
+
+(`cp` also works in PowerShell. In `cmd.exe` use `copy`.)
 
 ### Run it in Docker instead (optional)
 
@@ -71,8 +94,6 @@ docker compose run --rm app --user alice
 ```
 
 If the variable is empty, Docker stops at once and says so. Use an absolute path (no `~`), and make sure the file exists: Docker would otherwise create an empty folder with that name.
-
-> **Windows without Docker:** activate the environment with `.venv\Scripts\activate` and copy the env file with `copy .env.example .env`. The other commands are the same.
 
 ### Users
 

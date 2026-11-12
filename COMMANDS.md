@@ -5,7 +5,7 @@ All CLI commands for this repo.
 ## Setup
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate   # Windows PowerShell: python -m venv .venv ; .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
 pre-commit install
 cp .env.example .env
