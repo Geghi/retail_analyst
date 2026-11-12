@@ -1,5 +1,6 @@
 import os
 
+from langchain_core.exceptions import ModelRateLimitError
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -53,7 +54,7 @@ def failure_message(error: Exception) -> str:
     code = getattr(error, "code", None) or getattr(error, "status_code", None)
     if code in (401, 403):
         return AUTH_MESSAGE
-    if code == 429:
+    if code == 429 or isinstance(error, ModelRateLimitError):
         return QUOTA_MESSAGE
     return SAFE_MESSAGE
 

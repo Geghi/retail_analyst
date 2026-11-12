@@ -113,3 +113,17 @@ def test_a_quota_limit_says_the_daily_limit_is_reached_not_that_the_service_is_d
 
     assert "limit" in raised.value.user_message.lower()
     assert "temporarily unavailable" not in raised.value.user_message
+
+
+class RealRateLimit(FakeListChatModel):
+    def _call(self, *args, **kwargs):
+        from langchain_google_genai.chat_models import GoogleRateLimitError
+
+        raise GoogleRateLimitError("Error calling model (RESOURCE_EXHAUSTED): 429 quota exceeded")
+
+
+def test_the_real_gemini_rate_limit_error_is_reported_as_a_usage_limit():
+    with pytest.raises(LlmUnavailable) as raised:
+        generate("hi", model=RealRateLimit(responses=["x"]))
+
+    assert "limit" in raised.value.user_message.lower()
