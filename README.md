@@ -70,6 +70,8 @@ docker compose up -d db         # Postgres for saved reports
 python -m retail_analyst.cli --user alice
 ```
 
+`docker compose` needs Docker Desktop to be **running** (on Windows, wait for "Engine running"). If you see `error during connect ... dockerDesktopLinuxEngine`, start it and retry. Any Postgres works instead: put its address in `DATABASE_URL`.
+
 (`cp` also works in PowerShell. In `cmd.exe` use `copy`.)
 
 **Google Cloud CLI not installed?** On Windows run `winget install Google.CloudSDK`, then open a new terminal so `gcloud` is on the PATH. On macOS use `brew install --cask google-cloud-sdk`.
