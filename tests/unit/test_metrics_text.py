@@ -50,3 +50,13 @@ def test_metric_definitions_state_churn_and_revenue_rules():
     assert "90 days" in text
     assert "Cancelled" in text and "Returned" in text
     assert "complete calendar month" in text
+
+
+def test_a_total_of_orders_is_counted_once_over_the_whole_set_not_summed_by_group():
+    text = metric_definitions()
+    assert "COUNT(DISTINCT order_id)" in text
+    assert "never add up" in text
+
+
+def test_every_metric_asked_for_is_also_given_overall_not_only_by_group():
+    assert "overall" in metric_definitions()

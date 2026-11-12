@@ -1,0 +1,51 @@
+id: period-comparison
+question: Compare this month so far with the same days last year on revenue, orders, average order value and return rate, overall and by category
+queries:
+  - |
+    WITH items AS (
+      SELECT IF(DATE(oi.created_at) >= DATE_TRUNC(CURRENT_DATE(), MONTH), 'current', 'prior') AS period,
+             oi.order_id, oi.status, oi.sale_price
+      FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
+      WHERE (DATE(oi.created_at) >= DATE_TRUNC(CURRENT_DATE(), MONTH)
+             AND DATE(oi.created_at) <= CURRENT_DATE())
+         OR (DATE(oi.created_at) >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 YEAR)
+             AND DATE(oi.created_at) <= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR))
+    )
+    SELECT period,
+           SUM(IF(status NOT IN ('Cancelled', 'Returned'), sale_price, 0)) AS revenue,
+           COUNT(DISTINCT IF(status NOT IN ('Cancelled', 'Returned'), order_id, NULL)) AS orders,
+           SAFE_DIVIDE(SUM(IF(status NOT IN ('Cancelled', 'Returned'), sale_price, 0)),
+                       COUNT(DISTINCT IF(status NOT IN ('Cancelled', 'Returned'), order_id, NULL))) AS average_order_value,
+           SAFE_DIVIDE(COUNTIF(status = 'Returned'), COUNT(*)) AS return_rate
+    FROM items
+    GROUP BY period
+  - |
+    WITH items AS (
+      SELECT IF(DATE(oi.created_at) >= DATE_TRUNC(CURRENT_DATE(), MONTH), 'current', 'prior') AS period,
+             p.category, oi.order_id, oi.status, oi.sale_price
+      FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
+      JOIN `bigquery-public-data.thelook_ecommerce.products` p ON p.id = oi.product_id
+      WHERE (DATE(oi.created_at) >= DATE_TRUNC(CURRENT_DATE(), MONTH)
+             AND DATE(oi.created_at) <= CURRENT_DATE())
+         OR (DATE(oi.created_at) >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 YEAR)
+             AND DATE(oi.created_at) <= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR))
+    )
+    SELECT period, category,
+           SUM(IF(status NOT IN ('Cancelled', 'Returned'), sale_price, 0)) AS revenue,
+           COUNT(DISTINCT IF(status NOT IN ('Cancelled', 'Returned'), order_id, NULL)) AS orders,
+           SAFE_DIVIDE(COUNTIF(status = 'Returned'), COUNT(*)) AS return_rate
+    FROM items
+    GROUP BY period, category
+report: |
+  Observed
+  - Overall revenue and orders are measured over the whole set; the per-category orders are not added up to get the total, because one order can hold items from several categories.
+  - Average order value can fall even when revenue rises, if orders grow faster than revenue.
+  - Return rates of the open month are still immature, so they are read with caution.
+
+  Hypotheses (not verified)
+  - A jump in orders reflects more traffic or promotion rather than a change in basket size.
+  - A lower average order value comes from more small baskets.
+
+  Actions
+  - Check the share of each category in the change before choosing where to act.
+  - Compare the return rate again once the month is complete.

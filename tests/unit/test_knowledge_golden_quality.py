@@ -36,3 +36,15 @@ def test_no_query_names_a_personal_column(trio_id, sql):
 def test_reports_separate_facts_from_hypotheses_and_list_actions(trio):
     for heading in ("Observed", "Hypotheses", "Actions"):
         assert heading in trio.report
+
+
+def test_a_period_comparison_example_gives_overall_and_per_category_figures():
+    (trio,) = [t for t in TRIOS if t.id == "period-comparison"]
+    assert len(trio.queries) == 2
+
+
+@pytest.mark.parametrize(("trio_id", "sql"), QUERIES)
+def test_no_query_hardcodes_a_year(trio_id, sql):
+    import re
+
+    assert not re.search(r"\b20\d\d\b", sql)
