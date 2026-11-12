@@ -33,7 +33,7 @@ An executive asks a question, the agent writes the SQL, runs it, and explains th
 
 ## Quick start
 
-**You need:** Python 3.12+, Docker, the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey), and a Google Cloud project id.
+**You need:** Python **3.12 or newer** (check with `python --version`; older versions fail at `pip install` with a confusing "no matching version" error), Docker, the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey), and a Google Cloud project id.
 
 **1. Get the code and create the environment.** This is the only step that differs by system.
 
@@ -42,6 +42,7 @@ An executive asks a question, the agent writes the SQL, runs it, and explains th
 ```bash
 git clone https://github.com/Geghi/retail_analyst.git
 cd retail_analyst
+python3 --version        # must be 3.12 or newer
 python3 -m venv .venv
 source .venv/bin/activate
 ```
@@ -51,7 +52,7 @@ source .venv/bin/activate
 ```powershell
 git clone https://github.com/Geghi/retail_analyst.git
 cd retail_analyst
-python -m venv .venv
+py -3.12 -m venv .venv   # picks Python 3.12 and stops with a clear message if it is missing
 .venv\Scripts\Activate.ps1
 ```
 
