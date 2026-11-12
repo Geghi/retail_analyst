@@ -29,6 +29,7 @@ services:
       # Credentials stay outside the image, mounted read-only at run time.
       - ${GOOGLE_APPLICATION_CREDENTIALS:-${HOME}/.config/gcloud/application_default_credentials.json}:/secrets/gcp.json:ro
       - ./logs:/app/logs
+      - ./exports:/app/exports
     stdin_open: true
     tty: true
 

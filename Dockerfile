@@ -10,7 +10,7 @@ RUN pip install -r requirements.txt
 COPY config ./config
 COPY golden ./golden
 
-RUN useradd --uid 1000 --create-home analyst && mkdir -p /app/logs && chown analyst /app/logs
+RUN useradd --uid 1000 --create-home analyst && mkdir -p /app/logs /app/exports && chown analyst /app/logs /app/exports
 USER analyst
 
 ENTRYPOINT ["python", "-m", "retail_analyst.cli"]

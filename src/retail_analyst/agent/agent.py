@@ -19,6 +19,7 @@ class Reply:
     kind: str
     text: str
     trace_id: str
+    tables: tuple = ()
 
 
 REPORTS_DOWN_TEXT = "Saved reports are temporarily unavailable. Please try again in a moment."
@@ -54,7 +55,13 @@ class Agent:
             prompt = state["__interrupt__"][0].value
             return Reply(kind="needs_confirmation", text=prompt, trace_id=turn.trace_id)
         turn.finish(state["outcome"])
-        reply = Reply(kind=KINDS[state["outcome"]], text=state["answer"], trace_id=turn.trace_id)
+        tables = tuple(item["rows"] for item in state.get("results", []) if item["rows"])
+        reply = Reply(
+            kind=KINDS[state["outcome"]],
+            text=state["answer"],
+            trace_id=turn.trace_id,
+            tables=tables if state["outcome"] == "answered" else (),
+        )
         self.remember(message, reply)
         return reply
 

@@ -25,7 +25,7 @@ docker compose down
 python -m retail_analyst.cli --user alice   # alice, bob or carol
 ```
 
-In the chat: `/trace` shows the steps of the last answer, `/reports` lists your saved reports, `exit` quits. With `TRACE_VERBOSE=1` in `.env`, the trace (`/trace`, `logs/agent.jsonl`) also holds each prompt, the raw model answer and the rows of each query (personal columns are already masked).
+In the chat: `/trace` shows the steps of the last answer, `/reports` lists your saved reports, `/export` saves the tables of the last answer as CSV files in `exports/`, `exit` quits. With `TRACE_VERBOSE=1` in `.env`, the trace (`/trace`, `logs/agent.jsonl`) also holds each prompt, the raw model answer and the rows of each query (personal columns are already masked).
 
 ## Chat in Docker
 

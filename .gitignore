@@ -241,3 +241,5 @@ Thumbs.db
 .claude
 .agents
 .scratch
+
+exports/
