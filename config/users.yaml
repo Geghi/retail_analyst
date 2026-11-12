@@ -1,0 +1,20 @@
+users:
+  alice:
+    name: Alice Rossi
+    categories:
+      - Jeans
+      - Sweaters
+      - Fashion Hoodies & Sweatshirts
+  bob:
+    name: Bob Chen
+    categories:
+      - Outerwear & Coats
+      - Suits & Sport Coats
+  carol:
+    name: Carol Smith
+    categories:
+      - Jeans
+      - Outerwear & Coats
+      - Sweaters
+      - Suits & Sport Coats
+      - Fashion Hoodies & Sweatshirts
