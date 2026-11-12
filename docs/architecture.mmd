@@ -1,0 +1,53 @@
+flowchart LR
+  subgraph Client["Client"]
+    EXEC["Executive"] --> UI["Chat UI or CLI"]
+  end
+
+  UI -->|"HTTPS + identity token"| GW["API gateway: auth, rate limit, user id"]
+
+  subgraph Agent["Agent service - Cloud Run, stateless"]
+    ORCH["Orchestrator loop"]
+    INSAFE["Input safety: scope and injection check"]
+    PLAN["Gemini call 1: plan and write SQL"]
+    GR["Guardrails: read-only, PII block, product scope"]
+    ANA["Gemini call 2: analyze and write report"]
+    MASK["Result masking"]
+    RTOOLS["Report tools: save, request delete, confirm delete"]
+    LLMC["LLM client: retries and fallback model"]
+    WH["Warehouse client: dry run cost cap, retries"]
+  end
+
+  GW --> ORCH
+  ORCH --> INSAFE --> PLAN
+  PLAN --> GR --> WH
+  WH --> MASK --> ANA --> ORCH
+  ORCH --> RTOOLS
+  PLAN -. uses .-> LLMC
+  ANA -. uses .-> LLMC
+  LLMC --> GEM["Gemini - Vertex AI"]
+  WH --> BQ[("BigQuery: thelook_ecommerce, read-only service account")]
+
+  subgraph Data["State"]
+    PG[("Cloud SQL Postgres + pgvector: reports, pending deletions, preferences, knowledge index")]
+    GCS[("Cloud Storage: Golden bucket, versioned trios")]
+    CFG[("Config store: persona text, metric definitions, user scopes")]
+  end
+
+  ORCH -->|"top 3 similar trios"| PG
+  RTOOLS --> PG
+  ORCH -->|"read at every turn"| CFG
+  GCS -->|"ingestion job: validate, embed, index"| PG
+
+  subgraph Learn["Learning loop - offline"]
+    FB["Feedback and traces"] --> CAND["Candidate trios"]
+    CAND --> EVAL["Automatic checks: SQL runs, numbers match, no PII"]
+    EVAL --> REV["Analyst approval"]
+    REV --> GCS
+  end
+
+  ORCH --> OBS["OpenTelemetry traces, metrics, logs"]
+  OBS --> LF["Langfuse: LLM traces, cost, evals"]
+  OBS --> MON["Cloud Monitoring: alerts, dashboards"]
+  OBS --> FB
+
+  SM["Secret Manager"] -.-> Agent
