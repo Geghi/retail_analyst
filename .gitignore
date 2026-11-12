@@ -236,3 +236,8 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Local agent tooling
+.claude/
+.agents/
+.scratch/
