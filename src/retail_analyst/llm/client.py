@@ -5,8 +5,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_FALLBACK_MODEL = "gemini-3.7-flash"
-DEFAULT_MAX_RETRIES = 3
-TIMEOUT_SECONDS = 60
+DEFAULT_MAX_RETRIES = 2
+DEFAULT_TIMEOUT_SECONDS = 20
 SAFE_MESSAGE = "The AI service is temporarily unavailable. Please try again later."
 AUTH_MESSAGE = "The AI service rejected the configured credentials."
 
@@ -26,14 +26,15 @@ def build_model():
         os.environ.get("GEMINI_FALLBACK_MODEL", DEFAULT_FALLBACK_MODEL),
     )
     max_retries = int(os.environ.get("LLM_MAX_RETRIES", DEFAULT_MAX_RETRIES))
-    key = (api_key, names, max_retries)
+    timeout = float(os.environ.get("LLM_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS))
+    key = (api_key, names, max_retries, timeout)
     if key not in _models:
         primary, fallback = (
             ChatGoogleGenerativeAI(
                 model=name,
                 google_api_key=api_key,
                 max_retries=max_retries,
-                timeout=TIMEOUT_SECONDS,
+                timeout=timeout,
             )
             for name in names
         )

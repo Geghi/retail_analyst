@@ -81,3 +81,20 @@ def test_build_model_defaults(monkeypatch):
 def test_build_model_is_cached(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", SECRET)
     assert build_model() is build_model()
+
+
+def test_build_model_has_a_short_default_timeout_and_few_retries(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", SECRET)
+    monkeypatch.delenv("LLM_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("LLM_MAX_RETRIES", raising=False)
+    model = build_model()
+    assert model.runnable.timeout == 20
+    assert model.runnable.max_retries == 2
+
+
+def test_build_model_timeout_comes_from_the_environment(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", SECRET)
+    monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "7")
+    model = build_model()
+    assert model.runnable.timeout == 7
+    assert model.fallbacks[0].timeout == 7
