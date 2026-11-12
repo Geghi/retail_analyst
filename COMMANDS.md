@@ -19,6 +19,14 @@ docker compose up -d db
 docker compose down
 ```
 
+## Chat
+
+```bash
+python -m retail_analyst.cli --user alice   # alice, bob or carol
+```
+
+In the chat: `/trace` shows the steps of the last answer, `/reports` lists your saved reports, `exit` quits.
+
 ## Lint and complexity
 
 ```bash
