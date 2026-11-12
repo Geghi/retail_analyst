@@ -2,7 +2,9 @@ import sqlglot
 from sqlglot import exp
 
 from .errors import GuardrailViolation
+from .pii import check_pii
 from .scope import UserScope
+from .scoping import scope_products
 
 PROJECT = "bigquery-public-data"
 DATASET = "thelook_ecommerce"
@@ -34,4 +36,5 @@ def validate_sql(sql: str, scope: UserScope) -> str:
     cte_names = {cte.alias for cte in query.find_all(exp.CTE)}
     for table in query.find_all(exp.Table):
         check_table(table, cte_names)
-    return query.sql(dialect="bigquery")
+    check_pii(query)
+    return scope_products(query, scope, cte_names).sql(dialect="bigquery")
