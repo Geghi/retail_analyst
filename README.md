@@ -72,6 +72,9 @@ python -m retail_analyst.cli --user alice
 
 (`cp` also works in PowerShell. In `cmd.exe` use `copy`.)
 
+**Google Cloud CLI not installed?** On Windows run `winget install Google.CloudSDK`, then open a new terminal so `gcloud` is on the PATH. On macOS use `brew install --cask google-cloud-sdk`.
+If you prefer not to install it, create a service-account key with the *BigQuery Job User* role, save the JSON file anywhere, and set `GOOGLE_APPLICATION_CREDENTIALS` in `.env` to its full path. The `gcloud` step is then not needed.
+
 ### Run it in Docker instead (optional)
 
 No local Python is needed, and it works the same on Linux, macOS and Windows (Docker Desktop).
