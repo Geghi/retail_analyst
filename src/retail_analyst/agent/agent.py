@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import dataclass
 
+import psycopg
 from langgraph.types import Command
 
 from retail_analyst import observability
@@ -20,6 +21,7 @@ class Reply:
     trace_id: str
 
 
+REPORTS_DOWN_TEXT = "Saved reports are temporarily unavailable. Please try again in a moment."
 KINDS = {"answered": "answer", "error": "error", "refused": "refusal"}
 
 
@@ -44,6 +46,9 @@ class Agent:
         except (LlmUnavailable, WarehouseError) as error:
             turn.finish("error", error=type(error).__name__)
             return Reply(kind="error", text=error.user_message, trace_id=turn.trace_id)
+        except psycopg.Error as error:
+            turn.finish("error", error=type(error).__name__)
+            return Reply(kind="error", text=REPORTS_DOWN_TEXT, trace_id=turn.trace_id)
         if state.get("__interrupt__"):
             turn.finish("needs_confirmation")
             prompt = state["__interrupt__"][0].value

@@ -136,3 +136,27 @@ def test_this_conversation_deletes_only_reports_made_in_it(conn, tmp_path):
 
     assert asked.kind == "needs_confirmation"
     assert [r.body for r in list_reports(conn, user)] == ["elsewhere"]
+
+
+def test_when_the_reports_database_is_down_saving_says_so_and_analysis_still_works(tmp_path):
+    down = connect(URL)
+    down.close()
+    warehouse = FakeWarehouse([rows_result([{"category": "Jeans", "revenue": 1.0}])] * 2)
+    replies = [
+        plan_reply(REVENUE_SQL),
+        analyst_reply("# Report\nJeans lead."),
+        plan_reply(intent="save_report"),
+        plan_reply(REVENUE_SQL),
+        analyst_reply("Still working."),
+    ]
+    _, _, agent = new_agent(down, tmp_path, replies, warehouse)
+
+    agent.respond("Create a report")
+    saved = agent.respond("Save this report")
+    after = agent.respond("Revenue again?")
+
+    assert saved.kind == "error"
+    assert "saved reports" in saved.text.lower()
+    assert "OperationalError" not in saved.text
+    assert after.kind == "answer"
+    assert after.text == "Still working."
