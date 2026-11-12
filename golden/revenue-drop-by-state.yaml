@@ -1,0 +1,40 @@
+id: revenue-drop-by-state
+question: Why did revenue drop in one state compared with another?
+queries:
+  - |
+    SELECT u.state,
+           SUM(oi.sale_price) AS revenue,
+           COUNT(DISTINCT oi.order_id) AS orders,
+           SAFE_DIVIDE(SUM(oi.sale_price), COUNT(DISTINCT oi.order_id)) AS avg_order_value
+    FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
+    JOIN `bigquery-public-data.thelook_ecommerce.users` u ON u.id = oi.user_id
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+      AND u.state IN ('California', 'Texas')
+      AND oi.created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 180 DAY)
+    GROUP BY u.state
+  - |
+    SELECT u.state,
+           p.category,
+           SUM(oi.sale_price) AS revenue
+    FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
+    JOIN `bigquery-public-data.thelook_ecommerce.users` u ON u.id = oi.user_id
+    JOIN `bigquery-public-data.thelook_ecommerce.products` p ON p.id = oi.product_id
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+      AND u.state IN ('California', 'Texas')
+      AND oi.created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 180 DAY)
+    GROUP BY u.state, p.category
+    ORDER BY u.state, revenue DESC
+report: |
+  Observed
+  - Revenue in the weaker state is lower, and the gap shows up mainly in the number of orders.
+  - Average order value is similar in both states.
+  - The category mix differs: the weaker state sells less in the top-revenue categories.
+
+  Hypotheses (not verified)
+  - Fewer active customers in the weaker state, for example weaker acquisition there.
+  - A seasonal or regional promotion ran in one state only.
+
+  Actions
+  - Compare new versus returning customers per state to test the acquisition hypothesis.
+  - Check traffic source mix per state.
+  - Review the promotion calendar for the period.

@@ -1,0 +1,30 @@
+id: monthly-revenue-trend
+question: What is the monthly revenue trend with month-over-month change?
+queries:
+  - |
+    WITH monthly AS (
+      SELECT DATE_TRUNC(DATE(oi.created_at), MONTH) AS month,
+             SUM(oi.sale_price) AS revenue
+      FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
+      WHERE oi.status NOT IN ('Cancelled', 'Returned')
+        AND DATE(oi.created_at) < DATE_TRUNC(CURRENT_DATE(), MONTH)
+      GROUP BY month
+    )
+    SELECT month,
+           revenue,
+           SAFE_DIVIDE(revenue - LAG(revenue) OVER (ORDER BY month),
+                       LAG(revenue) OVER (ORDER BY month)) AS mom_change
+    FROM monthly
+    ORDER BY month
+report: |
+  Observed
+  - Only complete calendar months are included; the current partial month is left out.
+  - Revenue grows over the period with month-to-month swings.
+
+  Hypotheses (not verified)
+  - Swings follow seasonality, with stronger months near year end.
+  - Growth comes from a larger customer base rather than higher spend per customer.
+
+  Actions
+  - Compare the same month across years to separate seasonality from growth.
+  - Split the trend by category to see which one drives the swings.

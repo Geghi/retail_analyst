@@ -1,0 +1,25 @@
+id: category-comparison
+question: Compare two product categories on revenue, margin and return rate and explain the difference
+queries:
+  - |
+    SELECT p.category,
+           SUM(IF(oi.status NOT IN ('Cancelled', 'Returned'), oi.sale_price, 0)) AS revenue,
+           SUM(IF(oi.status NOT IN ('Cancelled', 'Returned'), oi.sale_price - p.cost, 0)) AS margin,
+           SAFE_DIVIDE(COUNTIF(oi.status = 'Returned'), COUNT(*)) AS return_rate
+    FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
+    JOIN `bigquery-public-data.thelook_ecommerce.products` p ON p.id = oi.product_id
+    WHERE p.category IN ('Jeans', 'Accessories')
+    GROUP BY p.category
+report: |
+  Observed
+  - One category earns more revenue, but the other keeps a higher margin per sale.
+  - Return rates differ between the two categories.
+
+  Hypotheses (not verified)
+  - Higher returns in one category reflect fit or sizing issues.
+  - The lower-margin category is priced more aggressively.
+
+  Actions
+  - Break returns down by product to find the items driving them.
+  - Review pricing in the lower-margin category.
+  - Reassess the promotion budget once margin after returns is known.

@@ -1,0 +1,26 @@
+id: top-customers-by-spend
+question: Who are the top customers by total spend?
+queries:
+  - |
+    SELECT oi.user_id,
+           SUM(oi.sale_price) AS total_spend,
+           COUNT(DISTINCT oi.order_id) AS orders
+    FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+    GROUP BY oi.user_id
+    ORDER BY total_spend DESC
+    LIMIT 20
+report: |
+  Observed
+  - Customers are listed by user id only; no names or contact details are shown.
+  - Spend is concentrated: the top of the list spends clearly more than the median customer.
+  - Top spenders place several orders rather than a single large one.
+
+  Hypotheses (not verified)
+  - Repeat purchase, not basket size, drives top spend.
+  - Top customers are concentrated in a few categories.
+
+  Actions
+  - Break the top customers down by category to confirm where their spend goes.
+  - Build a retention programme aimed at this segment.
+  - Track how much of total revenue the top group represents over time.
