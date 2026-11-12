@@ -8,8 +8,15 @@ YES = {"yes", "y", "confirm", "ok", "okay", "sure", "si", "sì"}
 NO = {"no", "n", "cancel", "stop", "abort"}
 
 
+TITLE_LENGTH = 80
+
+
 def report_title(question: str) -> str:
-    return " ".join(question.split())[:80] or "Report"
+    text = " ".join(question.split())
+    if len(text) > TITLE_LENGTH:
+        cut = text[:TITLE_LENGTH]
+        text = cut.rsplit(" ", 1)[0] if text[TITLE_LENGTH] != " " else cut
+    return text.rstrip() or "Report"
 
 
 def normalize_answer(text: str) -> str:
