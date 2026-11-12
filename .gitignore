@@ -238,6 +238,6 @@ Thumbs.db
 *.swp
 
 # Local agent tooling
-.claude/
-.agents/
-.scratch/
+.claude
+.agents
+.scratch
