@@ -34,6 +34,19 @@ flowchart LR
 
 The detailed diagram, with the internals of the agent service and the learning loop, is in [architecture.mmd](architecture.mmd).
 
+### How the components talk
+
+| From → to | Protocol | Authentication |
+| --------- | -------- | -------------- |
+| UI → gateway | HTTPS and JSON, server-sent events for streaming answers | OIDC identity token of the executive |
+| Gateway → agent service | HTTPS to Cloud Run | Service-to-service identity, user id passed as a verified claim |
+| Agent → Gemini | Vertex AI API over HTTPS | Service account, no key in the image |
+| Agent → BigQuery | BigQuery API over HTTPS, a dry run before each query | Read-only service account |
+| Agent → Postgres | SQL over TLS on a private address through the Cloud SQL connector | IAM database authentication |
+| Agent → config store | Read at every turn, cached for a few seconds | Service account |
+| Ingestion job → bucket and Postgres | Cloud Storage API and SQL | Service account |
+| Agent → observability | OpenTelemetry (OTLP) to a collector, after the PII scrubber | Service account |
+
 ### Components and why
 
 | Block | Choice | Why |
@@ -41,7 +54,7 @@ The detailed diagram, with the internals of the agent service and the learning l
 | Front end | Web chat in production, CLI in the prototype | The agent core is a library with no UI code, so a new front end is a thin adapter. |
 | API gateway | Managed gateway with OIDC identity tokens | The user id comes from a verified token and is never taken from the model or the request body. |
 | Agent service | Python on Cloud Run, stateless | Scales to zero, scales out per request, and keeps conversation state in Postgres so any instance can serve any turn. |
-| LLM | Gemini through Vertex AI in production, AI Studio key in the prototype | The brief asks for Gemini. Vertex AI adds IAM, quotas per project and regional control. A second, cheaper model is the fallback. |
+| LLM | Gemini through Vertex AI in production, AI Studio key in the prototype | The brief asks for Gemini. Vertex AI adds IAM, quotas per project and regional control. A Flash-class model plans the queries and writes the answer, a Flash-Lite model is the fallback, and a Pro-class model is used for long reports only if the evaluation set shows a gain. Model names are configuration, never code. |
 | Agent framework | LangGraph state graph | The flow has branches (analysis, report, delete, direct reply), a correction loop and a pause for human confirmation. LangGraph provides these as primitives: conditional edges, per-node retry policies, `interrupt` for the confirmation, a checkpointer that keeps each conversation's state by thread id, and callbacks for tracing. |
 | Warehouse | BigQuery through a `BigQueryClient`, read-only service account | The data already lives there. The client runs a dry run before every query, refuses queries above the byte cap, maps Google errors to typed errors and returns JSON-friendly rows. The service account can run queries and cannot write. |
 | State | Cloud SQL Postgres with the `pgvector` extension | Saved reports, pending deletions, conversation checkpoints, preferences and the knowledge index in one engine. |
@@ -53,15 +66,16 @@ The detailed diagram, with the internals of the agent service and the learning l
 ## 3. Request flow
 
 1. The gateway verifies the identity token and passes a trusted user id to the agent service.
-2. `load_context` loads the user's product scope, the persona text, today's date and the most similar approved trios for the question.
+2. `load_context` loads the user's product scope, the persona text, a calendar of ready-made date ranges built in code from today's date, and the most similar approved trios for the question. The calendar is placed first in the prompt, and a named period ("this month", "January last year", "the same days last year") is copied from it, so the model never works out a date itself.
 3. `plan` is the first Gemini call. It receives the question, the conversation so far, the schema description, the metric definitions and the trios, and replies with one JSON object holding an intent and, for an analysis, the SQL queries. The intents are analysis, schema question, greeting, save report, delete reports and other. Other (off-topic requests, requests for personal data, attempts to override instructions) ends in a polite refusal with no further model call.
 4. `run_queries` checks every query deterministically: a single `SELECT`, allowed tables only, no personal columns, and a rewrite so only the user's products are visible. The `BigQueryClient` then runs a dry run to estimate cost, refuses an over-budget query and executes the rest. Returned rows pass through result masking as a second line of defense.
 5. A rejected or failing query goes back to `plan` together with the error, for at most two corrections. An empty result gives the model one hint to broaden the query. After the limit the user gets a friendly message.
-6. `analyze` is the second Gemini call. It receives the masked rows as untrusted data and writes the answer or report, separating observed facts from hypotheses. It may ask for follow-up queries, which run through the same checks, for up to three query rounds in total.
+6. `analyze` is the second Gemini call. It receives the masked rows as untrusted data and writes the answer or report, separating observed facts from hypotheses. It may ask for follow-up queries, which run through the same checks, for up to three query rounds in total. The prompt states how many rows of each result the model sees out of how many exist, and the model must say when a result was cut.
 7. Schema questions and greetings are answered directly from the plan, with no query.
 8. Save report stores the last answer in Postgres for the user and the conversation, titled with the user's question.
 9. Delete reports lists the matching reports and creates a pending deletion. The graph then pauses at `confirm` until the user answers: yes performs the soft delete, no cancels.
-10. Every node emits trace events tagged with one trace id per turn, and the conversation state is checkpointed by thread id.
+10. The reply carries the answer text and, next to it, the result tables built by code from the masked rows, so the numbers an executive reads are never retyped by the model. The first rows are shown in the chat and an export saves every row as a CSV file.
+11. Every node emits trace events tagged with one trace id per turn, and the conversation state is checkpointed by thread id.
 
 ## 4. Data and where it lives
 
@@ -84,7 +98,7 @@ The agent uses trios to learn which metrics to look at, how to break a problem d
 
 - **At question time:** the question is embedded and the top three approved trios are retrieved from `pgvector`. They are placed in the prompt as guidance, with the instruction not to copy them.
 - **Filtering:** trios are filtered by the user's permissions before they reach the prompt, because a report about a product the user cannot see would leak it.
-- **Prototype:** five invented trios and a word-overlap ranking. Only the retrieval method differs from production.
+- **Prototype:** six invented trios and a word-overlap ranking. Only the retrieval method differs from production.
 - **Adding:** a new trio goes through validation (its SQL parses and runs, its numbers match its report, no personal data), then analyst approval, then it is written to the bucket, embedded and indexed.
 - **Updating:** a changed trio becomes a new version and is re-indexed. The old version is kept for audit.
 - **Retiring:** a trio is marked inactive and excluded from retrieval, for example when a metric definition changes. Age alone is not a reason, because old methods can stay valid.
@@ -102,6 +116,27 @@ Security is enforced by code around the model, never by the prompt.
 - **Result masking:** values that look like emails or phone numbers are redacted from returned rows, as a second line of defense.
 - **Identity:** the user id comes from the verified token and is passed to every tool by the service, never by the model.
 - **Defence in depth in production:** the read-only service account, per-group authorized views and the prompt rules each stop a different failure.
+
+**Layers of protection against personal data.**
+No single technique is enough, so each layer covers what the one before can miss.
+
+| Layer | What it does | Prototype | Production |
+| ----- | ------------ | --------- | ---------- |
+| 1. Structure | Blocked columns, geography only inside aggregates, product scope | Yes | Yes, plus authorized views in BigQuery |
+| 2. Pattern rules | Emails and phone numbers are redacted from result rows and from everything written to a trace | Yes | Yes |
+| 3. NER scrubber | A model detects names, addresses and identifiers in free text: the user's messages, the model's answers, the traces | No | Yes, running inside the agent service |
+| 4. Managed inspection | Cloud Sensitive Data Protection scans stored reports and the log pipeline | No | Optional second opinion |
+
+Layer 3 is needed because free text appears even when the columns are safe: a user can type a customer's name, the model can quote one, and a real retail database often has notes or reviews.
+The options we would evaluate, all able to run locally so no personal data leaves the service:
+
+- **Microsoft Presidio:** an open-source analyzer and anonymizer that combines pattern recognizers with spaCy named-entity models. It is the default candidate, because replacing a value with a label such as `<PERSON>` is built in.
+- **A transformer NER model for personal data** (a DeBERTa-style model from Hugging Face) or a **zero-shot NER model** (GLiNER-style) that can be told which entity types to look for. Heavier, usually better on unusual text.
+- **Cloud Sensitive Data Protection (DLP):** managed and inside Google Cloud, with built-in detectors. It sends text to a service, so it suits stored data and logs better than the interactive path.
+
+This is a proposal to confirm with measurements during development, not a fixed choice.
+We build a labelled set of realistic report sentences with synthetic names, emails and addresses, and compare the candidates on recall for direct identifiers (target: at least 99%), false positives that destroy useful text (a product named like a person), and added latency (target: under 50 ms at p95 for a typical answer).
+We keep the lightest option that meets the targets, and the deterministic rules of layer 2 stay in front of it.
 
 ### 5.3 High-stakes oversight (destructive operations)
 
@@ -191,7 +226,7 @@ The trace shows the user message, the retrieved trios, each model prompt and rep
 Given a bad answer, one search by trace id shows where it went wrong.
 
 **Prototype.**
-A LangGraph callback writes one JSON line per node (duration and outcome), per query (SQL and row count), per retry (reason) and per model call (model, input and output tokens, and the cost from a price table in the config). Each turn has a trace id. The chat command `/trace` shows the last turn, and `python -m retail_analyst.observability` summarises failure rate, retries, latency, tokens and cost.
+A LangGraph callback writes one JSON line per node (duration and outcome), per query (SQL and row count), per retry (reason) and per model call (model, input and output tokens, and the cost from a price table in the config). Each turn has a trace id. Every string written to the trace passes through the PII masking first. With `TRACE_VERBOSE=1` the trace also records each prompt, each raw model answer and the masked rows of each query, for debugging. The chat command `/trace` shows the last turn, and `python -m retail_analyst.observability` summarises failure rate, retries, latency, tokens and cost.
 
 **Production.**
 The service is instrumented with OpenTelemetry. Traces go to Langfuse for the model-specific views and to Cloud Monitoring for alerts such as error-rate and latency thresholds.
@@ -231,6 +266,8 @@ Sending a report by email, for example, would use the same request-then-confirm 
 | LLM | Gemini through an AI Studio key, with a fallback model | Gemini on Vertex AI |
 | Agent state | In-memory checkpointer, one process | Postgres checkpointer |
 | Golden retrieval | Word overlap over a few files | `pgvector` over an approved bucket |
+| Result display | Answer text plus tables in the terminal, `/export` writes CSV files | Same, rendered in the web chat with download |
+| PII beyond structure | Pattern rules on rows and traces | Adds the NER scrubber and optional managed inspection |
 | Observability | Local JSON log with tokens and cost per call, trace command | OpenTelemetry to Langfuse and Cloud Monitoring |
 | Persona | File read at every turn | Versioned store with an admin page |
 | Preferences, learning loop | Design only | Postgres profile and offline loop |

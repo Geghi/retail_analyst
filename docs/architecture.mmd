@@ -17,25 +17,31 @@ flowchart LR
     CONFIRM["confirm: graph pauses until the user answers yes or no"]
     GIVEUP["give_up: friendly message after the correction limit"]
     CKPT["Checkpointer: one thread per conversation"]
-    LLMC["Gemini client: timeout, retries, fallback model"]
+    LLMC["Gemini client: timeout, retries, fallback model, circuit breaker"]
+    SCRUB["PII scrubber: pattern rules and NER model, on rows and on traces"]
+    TOOLS["Tool registry: charts, email, web search (future)"]
     BQC["BigQueryClient: dry-run byte cap, typed errors, JSON rows"]
   end
 
   GW --> LOAD --> PLAN
+  ANA -->|"answer text + result tables"| GW
   PLAN -->|"analysis"| RUN
   PLAN -->|"schema question, greeting"| DIRECT
   PLAN -->|"other"| REFUSE
   PLAN -->|"save report"| SAVE
   PLAN -->|"delete reports"| REQDEL --> CONFIRM
-  RUN -->|"rows"| ANA
+  RUN -->|"rows"| SCRUB
+  SCRUB -->|"masked rows"| ANA
+  ANA -.->|"new tools"| TOOLS
+  TOOLS -.->|"send or delete: request, then confirm"| CONFIRM
   RUN -->|"error: up to 2 corrections"| PLAN
   RUN -->|"limit reached"| GIVEUP
   ANA -->|"follow-up queries: up to 3 rounds"| RUN
   PLAN -. uses .-> LLMC
   ANA -. uses .-> LLMC
-  LLMC --> GEM["Gemini - Vertex AI"]
+  LLMC -->|"HTTPS, Vertex AI API"| GEM["Gemini - Vertex AI"]
   RUN -->|"retried 3 times if the warehouse is unavailable"| BQC
-  BQC --> BQ[("BigQuery: thelook_ecommerce, read-only service account")]
+  BQC -->|"BigQuery API, dry run first"| BQ[("BigQuery: thelook_ecommerce, read-only service account")]
   CONFIRM -.-> CKPT
 
   subgraph Data["State"]
@@ -58,9 +64,10 @@ flowchart LR
     REV --> GCS
   end
 
-  Agent --> OBS["OpenTelemetry traces, metrics, logs"]
+  Agent -->|"OTLP, scrubbed"| OBS["OpenTelemetry traces, metrics, logs"]
   OBS --> LF["Langfuse: LLM traces, tokens, cost, evals"]
   OBS --> MON["Cloud Monitoring: alerts, dashboards"]
   OBS --> FB
 
+  ADMIN["Admin page: persona text, metric definitions"] --> CFG
   SM["Secret Manager"] -.-> Agent
