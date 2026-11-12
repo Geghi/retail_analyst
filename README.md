@@ -18,7 +18,7 @@ Ask in plain language. Get numbers, tables and a short report, never a customer'
 
 ## Contents
 
-[What it does](#what-it-does) · [Quick start](#quick-start) · [Example session](#example-session) · [How the requirements are met](#how-the-requirements-are-met) · [Architecture](#architecture) · [Framework choice](#framework-choice) · [Configuration](#configuration) · [Tests](#tests) · [Known limits](#known-limits) · [Project layout](#project-layout)
+[What it does](#what-it-does) · [Quick start](#quick-start) · [Example session](#example-session) · [How the requirements are met](#how-the-requirements-are-met) · [Architecture](#architecture) · [Framework choice](#framework-choice) · [Configuration](#configuration) · [Tests](#tests) · [Troubleshooting](#troubleshooting) · [Known limits](#known-limits) · [Project layout](#project-layout)
 
 ## What it does
 
@@ -56,8 +56,6 @@ py -3.12 -m venv .venv   # picks Python 3.12 and stops with a clear message if i
 .venv\Scripts\Activate.ps1
 ```
 
-If PowerShell refuses to run the activation script, run `Set-ExecutionPolicy -Scope Process Bypass` once in that window and try again.
-
 **2. Everything else is the same on every system.**
 
 ```bash
@@ -70,12 +68,7 @@ docker compose up -d db         # Postgres for saved reports
 python -m retail_analyst.cli --user alice
 ```
 
-`docker compose` needs Docker Desktop to be **running** (on Windows, wait for "Engine running"). If you see `error during connect ... dockerDesktopLinuxEngine`, start it and retry. Any Postgres works instead: put its address in `DATABASE_URL`.
-
-(`cp` also works in PowerShell. In `cmd.exe` use `copy`.)
-
-**Google Cloud CLI not installed?** On Windows run `winget install Google.CloudSDK`, then open a new terminal so `gcloud` is on the PATH. On macOS use `brew install --cask google-cloud-sdk`.
-If you prefer not to install it, create a service-account key with the *BigQuery Job User* role, save the JSON file anywhere, and set `GOOGLE_APPLICATION_CREDENTIALS` in `.env` to its full path. The `gcloud` step is then not needed.
+(`cp` also works in PowerShell. In `cmd.exe` use `copy`.) Something failed? See [Troubleshooting](#troubleshooting).
 
 ### Run it in Docker instead (optional)
 
@@ -240,6 +233,19 @@ pytest tests/acceptance -m acceptance   # live Gemini and BigQuery
 
 The default `pytest` run never touches Gemini or BigQuery.
 The acceptance scenarios (revenue question, schema question, personal-data refusal, product outside the user's scope, multi-step report, delete with confirmation, model fallback, query self-correction, trace with tokens) run only when selected by name.
+
+## Troubleshooting
+
+| You see | Cause and fix |
+| ------- | ------------- |
+| `Could not find a version that satisfies the requirement langchain-core==...` | Your Python is older than 3.12. Check `python --version`, install 3.12 (Windows: `winget install Python.Python.3.12`), recreate the environment with `py -3.12 -m venv .venv`. |
+| PowerShell: `running scripts is disabled` when activating | Run `Set-ExecutionPolicy -Scope Process Bypass` once in that window, then activate again. |
+| `gcloud` is not recognized | Install the Google Cloud CLI (Windows: `winget install Google.CloudSDK`, macOS: `brew install --cask google-cloud-sdk`), then **open a new terminal** so it is on the PATH. Without it, use a service-account key: save the JSON file, give it the *BigQuery Job User* role, and set `GOOGLE_APPLICATION_CREDENTIALS` in `.env` to its full path. |
+| `error during connect ... dockerDesktopLinuxEngine` | Docker Desktop is not running. Start it and wait for "Engine running". Any Postgres works instead: put its address in `DATABASE_URL`. |
+| `Cannot reach the reports database` | The database container is not up: `docker compose up -d db`. |
+| `GEMINI_MODEL is not set` (or another variable) | Copy `.env.example` to `.env` and fill it in. Model names have no built-in default. |
+| `GOOGLE_APPLICATION_CREDENTIALS points to a missing or empty file` (Docker only) | Set it in `.env` to the absolute path of your credentials file, with forward slashes on Windows. |
+| BigQuery `Forbidden` | The credentials belong to an account that cannot run jobs in `GCP_PROJECT_ID`. Log in with the right account, or fix the file named by `GOOGLE_APPLICATION_CREDENTIALS`. |
 
 ## Known limits
 
