@@ -26,8 +26,8 @@ services:
       DATABASE_URL: postgresql://analyst:analyst@db:5432/analyst
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp.json
     volumes:
-      # Credentials stay outside the image, mounted read-only at run time.
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-${HOME}/.config/gcloud/application_default_credentials.json}:/secrets/gcp.json:ro
+      # Credentials stay outside the image: the secrets/ folder of this project, read-only.
+      - ./secrets:/secrets:ro
       - ./logs:/app/logs
       - ./exports:/app/exports
     stdin_open: true

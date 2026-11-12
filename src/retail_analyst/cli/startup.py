@@ -58,5 +58,8 @@ def missing_setup(env: Mapping[str, str]) -> str | None:
             return f"{name} is not set. Copy .env.example to .env and fill it in."
     credentials = env.get("GOOGLE_APPLICATION_CREDENTIALS")
     if credentials and not Path(credentials).is_file():
-        return f"GOOGLE_APPLICATION_CREDENTIALS points to a file that does not exist: {credentials}"
+        return (
+            f"GOOGLE_APPLICATION_CREDENTIALS points to a file that does not exist: {credentials}\n"
+            "In Docker, copy your credentials to secrets/gcp.json (see the README)."
+        )
     return None

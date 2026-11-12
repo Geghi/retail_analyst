@@ -50,12 +50,24 @@ python -m retail_analyst.cli --user alice
 
 ### Run it in Docker instead
 
-No local Python is needed. The image holds no secrets: the env file is read at run time and your Google credentials are mounted read-only.
+No local Python is needed, and it works the same on Linux, macOS and Windows (Docker Desktop).
+The image holds no secrets: the env file is read at run time and your Google credentials are read from the `secrets/` folder of the project, which git ignores.
+
+Copy your credentials there once, then run:
+
+| System | Copy the credentials |
+| ------ | -------------------- |
+| macOS, Linux | `cp ~/.config/gcloud/application_default_credentials.json secrets/gcp.json` |
+| Windows (PowerShell) | `copy $env:APPDATA\gcloud\application_default_credentials.json secrets\gcp.json` |
+
+A service-account key file works too: save it as `secrets/gcp.json`.
 
 ```bash
 docker compose build app
 docker compose run --rm app --user alice
 ```
+
+> **Windows without Docker:** activate the environment with `.venv\Scripts\activate` and copy the env file with `copy .env.example .env`. The other commands are the same.
 
 ### Users
 

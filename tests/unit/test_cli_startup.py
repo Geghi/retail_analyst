@@ -41,6 +41,7 @@ def test_a_credentials_file_that_does_not_exist_is_reported(tmp_path):
     assert code == 1
     assert "GOOGLE_APPLICATION_CREDENTIALS" in output
     assert "missing.json" in output
+    assert "secrets/gcp.json" in output
 
 
 def test_an_unreachable_database_tells_how_to_start_it():
