@@ -6,3 +6,4 @@ sqlglot
 psycopg[binary]
 pyyaml
 python-dotenv
+-e .
