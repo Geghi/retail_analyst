@@ -133,3 +133,27 @@ def test_format_trace_shows_offsets_status_duration_and_sql():
     assert "12.5ms" in out[1]
     assert "SELECT 1" in out[1]
     assert format_trace([]) == ""
+
+
+def test_personal_data_typed_by_a_user_never_reaches_the_trace_file(tmp_path):
+    log = tmp_path / "agent.jsonl"
+    turn = start_turn("alice", "email jane@example.com or call +39 333 123 4567", log_path=log)
+    turn.event("llm", output="write to jane@example.com")
+    turn.finish("answered")
+
+    text = log.read_text()
+
+    assert "jane@example.com" not in text
+    assert "333 123 4567" not in text
+    assert "[REDACTED]" in text
+
+
+def test_dates_and_ids_in_the_trace_are_left_readable(tmp_path):
+    log = tmp_path / "agent.jsonl"
+    turn = start_turn("alice", "q", log_path=log)
+    turn.event("query", sql="SELECT 1 WHERE d >= '2026-07-01'")
+
+    events = lines(log)
+
+    assert events[1]["sql"] == "SELECT 1 WHERE d >= '2026-07-01'"
+    assert events[1]["trace_id"] == turn.trace_id

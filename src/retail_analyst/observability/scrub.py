@@ -1,6 +1,8 @@
 import os
 from typing import Any
 
+from retail_analyst.guardrails import mask_value
+
 MASK = "***"
 
 
@@ -11,7 +13,7 @@ def scrub(value: Any) -> Any:
 
 def _scrub(value: Any, secret: str | None) -> Any:
     if isinstance(value, str):
-        return value.replace(secret, MASK) if secret else value
+        return mask_value(value.replace(secret, MASK) if secret else value)
     if isinstance(value, dict):
         return {str(k): _scrub(v, secret) for k, v in value.items()}
     if isinstance(value, list | tuple):
