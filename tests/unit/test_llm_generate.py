@@ -98,3 +98,18 @@ def test_build_model_timeout_comes_from_the_environment(monkeypatch):
     model = build_model()
     assert model.runnable.timeout == 7
     assert model.fallbacks[0].timeout == 7
+
+
+class QuotaExceeded(FakeListChatModel):
+    def _call(self, *args, **kwargs):
+        error = RuntimeError("429 RESOURCE_EXHAUSTED daily limit")
+        error.code = 429
+        raise error
+
+
+def test_a_quota_limit_says_the_daily_limit_is_reached_not_that_the_service_is_down():
+    with pytest.raises(LlmUnavailable) as raised:
+        generate("hi", model=QuotaExceeded(responses=["x"]))
+
+    assert "limit" in raised.value.user_message.lower()
+    assert "temporarily unavailable" not in raised.value.user_message

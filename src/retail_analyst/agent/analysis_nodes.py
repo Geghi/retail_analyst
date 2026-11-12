@@ -14,6 +14,7 @@ from .texts import EMPTY_HINT, GIVE_UP_TEXT, NOT_JSON, REFUSAL_TEXT, SCHEMA_FALL
 PLAN_ROUTES = {
     "analysis": "run_queries",
     "schema_question": "schema_answer",
+    "smalltalk": "schema_answer",
     "save_report": "save_report",
     "delete_reports": "request_delete",
 }

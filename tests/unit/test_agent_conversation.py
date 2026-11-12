@@ -101,3 +101,17 @@ def test_an_over_budget_query_is_sent_back_to_be_narrowed(tmp_path):
 
     assert reply.kind == "answer"
     assert "scan too much data" in llm.calls[1]["prompt"]
+
+
+def test_a_greeting_gets_a_friendly_answer_not_a_refusal(tmp_path):
+    hello = "Hello! I can analyse sales, products and shopper trends."
+    llm = ScriptedLlm([plan_reply(intent="smalltalk", reply=hello)])
+    warehouse = FakeWarehouse([])
+    agent = Agent("alice", make_deps(llm, warehouse, tmp_path))
+
+    reply = agent.respond("Hi")
+
+    assert reply.kind == "answer"
+    assert reply.text == hello
+    assert warehouse.sqls == []
+    assert len(llm.calls) == 1

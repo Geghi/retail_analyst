@@ -8,6 +8,7 @@ DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash"
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_TIMEOUT_SECONDS = 20
 SAFE_MESSAGE = "The AI service is temporarily unavailable. Please try again later."
+QUOTA_MESSAGE = "The AI service usage limit has been reached. Please try again later."
 AUTH_MESSAGE = "The AI service rejected the configured credentials."
 
 _models: dict[tuple, object] = {}
@@ -52,6 +53,8 @@ def failure_message(error: Exception) -> str:
     code = getattr(error, "code", None) or getattr(error, "status_code", None)
     if code in (401, 403):
         return AUTH_MESSAGE
+    if code == 429:
+        return QUOTA_MESSAGE
     return SAFE_MESSAGE
 
 
