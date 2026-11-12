@@ -55,7 +55,7 @@ complexipy -f src
 ```bash
 pytest tests/unit
 pytest tests/integration
-pytest tests/acceptance -m integration
+pytest tests/acceptance -m acceptance
 pytest tests/unit/test_x.py::test_name
 ```
 

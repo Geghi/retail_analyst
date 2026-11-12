@@ -6,7 +6,7 @@
 | ----------- | --------------------- | ---------------------- |
 | Unit        | `pytest tests/unit`        | nothing                |
 | Integration | `pytest tests/integration` | `docker compose up -d db`; BigQuery and Gemini calls are faked |
-| Acceptance  | `pytest tests/acceptance -m integration` | live Gemini key and BigQuery credentials; never run automatically |
+| Acceptance  | `pytest tests/acceptance -m acceptance` | live Gemini key and BigQuery credentials; never run automatically |
 
 Acceptance covers the assignment scenarios end to end: revenue question, schema question, PII refusal, product outside the user's scope, multi-step report, delete with confirmation, model fallback, query self-correction, trace with tokens.
 

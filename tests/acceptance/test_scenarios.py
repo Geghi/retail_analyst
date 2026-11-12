@@ -8,14 +8,10 @@ Assertions avoid exact wording and numbers, because the model's phrasing varies.
 import re
 
 import pytest
-from conftest import MISSING
 
 from retail_analyst import observability, reports, warehouse
 
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skipif(bool(MISSING), reason=f"live setup incomplete: {MISSING}"),
-]
+pytestmark = pytest.mark.acceptance
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 DELETE_THIS_CONVERSATION = "Delete all the reports we made in this conversation"

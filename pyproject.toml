@@ -9,7 +9,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests/support"]
 testpaths = ["tests"]
-markers = ["integration: needs docker compose db and/or live services"]
+markers = [
+    "integration: needs docker compose db and/or live services",
+    "acceptance: live end-to-end scenarios, spend quota, run only with -m acceptance",
+]
 
 [tool.ruff]
 line-length = 100

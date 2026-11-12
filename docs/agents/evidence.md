@@ -8,7 +8,7 @@ L'agente sceglie il livello, al massimo tre prove, proporzionali al cambio.
 - Avvio in locale: `python -m retail_analyst.cli --user alice` dopo `docker compose up -d db` (dettagli in [COMMANDS.md](../../COMMANDS.md))
 - Unit: `pytest tests/unit`
 - Integrazione: `pytest tests/integration`
-- Acceptance live: `pytest tests/acceptance -m integration`
+- Acceptance live: `pytest tests/acceptance -m acceptance`
 
 ## Quanto testare — i livelli
 
