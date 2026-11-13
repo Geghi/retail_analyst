@@ -233,7 +233,7 @@ pytest tests/acceptance -m acceptance   # live Gemini and BigQuery
 ```
 
 The default `pytest` run never touches Gemini or BigQuery.
-The acceptance scenarios (revenue question, schema question, personal-data refusal, product outside the user's scope, multi-step report, delete with confirmation, model fallback, query self-correction, trace with tokens) run only when selected by name.
+The acceptance scenarios (revenue question, schema question, personal-data refusal, product outside the user's scope, multi-step report, delete with confirmation, model fallback, query self-correction, trace with tokens) run only when selected by name. They exercise the four prototype requirements (safety and PII masking, oversight of deletions, resilience, observability) against the live services. They check structure and effects (outcome, tables, saved rows, trace events) rather than exact wording. How the agent is evaluated before a production release (evaluation set, report checks, UX measures) is described in the [HLD](docs/HLD.md), not implemented here.
 
 ## Troubleshooting
 
