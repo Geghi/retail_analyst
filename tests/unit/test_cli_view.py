@@ -121,7 +121,7 @@ def test_the_plain_view_keeps_the_simple_text_output():
     assert shown[0] == "Chatting as alice. Type /trace, /reports, or exit."
     assert shown[1] == "Jeans lead."
     assert "Sweaters  29,279.78" in shown[2]
-    assert shown[3] == "- October revenue (2026-11-12)"
+    assert shown[3] == "1. October revenue (2026-11-12)"
 
 
 def test_a_terminal_gets_the_rich_view_and_a_pipe_or_custom_writer_gets_plain_text(monkeypatch):
@@ -130,3 +130,22 @@ def test_a_terminal_gets_the_rich_view_and_a_pipe_or_custom_writer_gets_plain_te
     assert isinstance(choose_view([].append), PlainView)
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     assert isinstance(choose_view(print), PlainView)
+
+
+def test_an_opened_report_shows_its_title_date_and_text():
+    view, out = rich_view()
+
+    view.report("October revenue", date(2026, 11, 12), "Jeans **lead** in October.")
+
+    shown = out.getvalue()
+    assert "October revenue" in shown and "2026-11-12" in shown
+    assert "Jeans lead in October." in shown
+
+
+def test_the_prompt_asked_for_is_the_prompt_shown(monkeypatch):
+    view, out = rich_view()
+    monkeypatch.setattr("builtins.input", lambda *_: "")
+
+    view.read("report number (Enter to go back)> ")
+
+    assert "report number" in out.getvalue()

@@ -86,3 +86,12 @@ def test_export_before_any_answer_says_there_is_nothing_to_save(tmp_path):
 
     assert shown == ["Nothing to export yet. Ask a question first."]
     assert not (tmp_path / "exports").exists()
+
+
+def test_export_into_a_folder_that_cannot_be_written_says_so_instead_of_crashing(tmp_path):
+    blocked = tmp_path / "exports"
+    blocked.write_text("a file, not a folder")
+
+    shown = chat(revenue_agent(tmp_path, ROWS), "Revenue?", "/export", export_dir=blocked)
+
+    assert "could not be saved" in shown[-1]

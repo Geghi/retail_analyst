@@ -49,7 +49,15 @@ class PlainView:
         self.write(observability.format_trace(events))
 
     def reports(self, saved: list[tuple[str, object]]) -> None:
-        self.write("\n".join(f"- {title} ({saved_on:%Y-%m-%d})" for title, saved_on in saved))
+        self.write(
+            "\n".join(
+                f"{n}. {title} ({saved_on:%Y-%m-%d})"
+                for n, (title, saved_on) in enumerate(saved, 1)
+            )
+        )
+
+    def report(self, title: str, saved_on, body: str) -> None:
+        self.write(f"{title} ({saved_on:%Y-%m-%d})\n\n{body}")
 
 
 class RichView:
@@ -59,7 +67,7 @@ class RichView:
         self.console = console or Console()
 
     def read(self, prompt: str) -> str:
-        return self.console.input("[bold cyan]you>[/] ")
+        return self.console.input(Text(prompt, style="bold cyan"))
 
     def greeting(self, user: str) -> None:
         body = Text()
@@ -127,11 +135,17 @@ class RichView:
 
     def reports(self, saved: list[tuple[str, object]]) -> None:
         table = Table(box=box.SIMPLE_HEAD, header_style="bold cyan", pad_edge=False)
+        table.add_column("#", style="bold", justify="right")
         table.add_column("report")
         table.add_column("saved", style="dim")
-        for title, saved_on in saved:
-            table.add_row(title, f"{saved_on:%Y-%m-%d}")
+        for number, (title, saved_on) in enumerate(saved, 1):
+            table.add_row(str(number), title, f"{saved_on:%Y-%m-%d}")
         self.console.print(table)
+
+    def report(self, title: str, saved_on, body: str) -> None:
+        self.console.print(
+            Panel(Markdown(body), title=title, subtitle=f"{saved_on:%Y-%m-%d}", border_style="cyan")
+        )
 
 
 def _status(event: dict) -> Text:

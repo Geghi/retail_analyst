@@ -8,6 +8,7 @@ from agent_support import (
     rows_result,
 )
 from retail_analyst.agent import Agent
+from retail_analyst.agent.replies import UNREADABLE
 from retail_analyst.llm import LlmUnavailable
 from retail_analyst.warehouse import WarehouseUnavailable
 
@@ -72,3 +73,49 @@ def test_an_analyst_reply_that_is_plain_text_is_used_as_the_answer(tmp_path):
 
     assert reply.kind == "answer"
     assert reply.text == "Jeans lead revenue."
+
+
+MALFORMED_ANALYST = (
+    '{"answer": "Jeans lead.", "follow_up_queries": [], '
+    '"findings": "### Summary\\In 2026, Jeans lead revenue.", '
+    '"action_items": ["Restock Jeans", "Review Socks"]}'
+)
+
+
+def test_an_analyst_json_with_an_invalid_escape_and_extra_keys_still_shows_readable_text(tmp_path):
+    llm = ScriptedLlm([plan_reply(REVENUE_SQL), MALFORMED_ANALYST])
+    warehouse = FakeWarehouse([rows_result([{"category": "Jeans", "revenue": 1.0}])])
+    agent = Agent("alice", make_deps(llm, warehouse, tmp_path))
+
+    reply = agent.respond("Revenue by category?")
+
+    assert reply.kind == "answer"
+    assert "{" not in reply.text
+    assert "Jeans lead." in reply.text
+    assert "Restock Jeans" in reply.text
+
+
+def test_an_unreadable_analyst_json_is_asked_again_and_the_second_reply_is_used(tmp_path):
+    broken = '{"answer": "Jeans lead.", "follow_up_queries": [ oops'
+    llm = ScriptedLlm([plan_reply(REVENUE_SQL), broken, analyst_reply("Jeans lead.")])
+    warehouse = FakeWarehouse([rows_result([{"category": "Jeans", "revenue": 1.0}])])
+    agent = Agent("alice", make_deps(llm, warehouse, tmp_path))
+
+    reply = agent.respond("Revenue by category?")
+
+    assert reply.text == "Jeans lead."
+    assert "valid JSON" in llm.calls[2]["prompt"]
+
+
+def test_an_analyst_that_keeps_returning_broken_json_gives_a_fixed_message_after_the_retries(
+    tmp_path,
+):
+    broken = '{"answer": "Jeans lead.", "follow_up_queries": [ oops'
+    llm = ScriptedLlm([plan_reply(REVENUE_SQL), broken, broken, broken])
+    warehouse = FakeWarehouse([rows_result([{"category": "Jeans", "revenue": 1.0}])])
+    agent = Agent("alice", make_deps(llm, warehouse, tmp_path))
+
+    reply = agent.respond("Revenue by category?")
+
+    assert reply.text == UNREADABLE
+    assert len(llm.calls) == 4

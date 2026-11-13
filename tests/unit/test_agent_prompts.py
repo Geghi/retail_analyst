@@ -39,3 +39,16 @@ def test_the_planner_limits_breakdowns_with_many_values_to_the_top_ones():
     system = planner_system("2026-11-12", "none")
 
     assert "ORDER BY" in system and "LIMIT 10" in system
+
+
+def test_the_planner_treats_any_request_to_keep_the_last_report_as_save_report():
+    system = planner_system("2026-11-12", "none")
+
+    assert "save, keep, store or create the report you just wrote" in system
+    assert "in any language" in system
+
+
+def test_the_analyst_is_told_to_put_the_whole_report_in_the_answer_field():
+    from retail_analyst.agent.prompts import analyst_system
+
+    assert "inside the answer field" in analyst_system("persona", "2026-11-12")

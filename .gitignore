@@ -223,7 +223,8 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Project
-logs/
+logs/*
+!logs/.gitkeep
 *.log
 service-account*.json
 gcp-key*.json
@@ -242,5 +243,7 @@ Thumbs.db
 .agents
 .scratch
 
-exports/
+exports/*
+!exports/.gitkeep
 treehouse.toml
+secrets/

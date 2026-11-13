@@ -7,7 +7,7 @@ from retail_analyst.warehouse import QueryFailed, QueryTooExpensive
 from .deps import AgentDeps
 from .limits import MAX_CORRECTIONS, MAX_QUERY_ROUNDS, MAX_TRACED_ROWS
 from .prompts import analyst_prompt, analyst_system, planner_prompt, planner_system
-from .replies import ReplyFormatError, parse_json_reply
+from .replies import UNREADABLE, ReplyFormatError, parse_json_reply, readable_answer
 from .state import AgentState
 from .texts import EMPTY_HINT, GIVE_UP_TEXT, NOT_JSON, REFUSAL_TEXT, SCHEMA_FALLBACK
 
@@ -107,12 +107,7 @@ class AnalysisNodes:
     def analyze(self, state: AgentState, config) -> dict:
         system = analyst_system(state["persona"], state["today"])
         prompt = analyst_prompt(state["question"], state["results"])
-        text = self.deps.generate(prompt, system=system, config=config)
-        try:
-            parsed = parse_json_reply(text)
-            answer, follow_ups = str(parsed["answer"]), list(parsed.get("follow_up_queries") or [])
-        except (ReplyFormatError, KeyError):
-            answer, follow_ups = text, []
+        answer, follow_ups = self.ask_analyst(prompt, system, config)
         rounds = state.get("rounds", 0) + 1
         more = bool(follow_ups) and rounds < MAX_QUERY_ROUNDS
         update = {"answer": answer, "last_answer": answer, "outcome": "answered"}
@@ -121,6 +116,14 @@ class AnalysisNodes:
         if more:
             update.update({"queries": follow_ups, "corrections": 0, "feedback": []})
         return update
+
+    def ask_analyst(self, prompt: str, system: str, config) -> tuple[str, list]:
+        for _ in range(MAX_CORRECTIONS + 1):
+            try:
+                return readable_answer(self.deps.generate(prompt, system=system, config=config))
+            except ReplyFormatError:
+                prompt = f"{prompt}\n\n{NOT_JSON}"
+        return UNREADABLE, []
 
     def after_analyze(self, state: AgentState) -> str:
         return "run_queries" if state["more"] else END
