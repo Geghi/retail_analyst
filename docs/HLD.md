@@ -116,6 +116,7 @@ Security is enforced by code around the model, never by the prompt.
 - **Result masking:** values that look like emails or phone numbers are redacted from returned rows, as a second line of defense.
 - **Identity:** the user id comes from the verified token and is passed to every tool by the service, never by the model.
 - **Defence in depth in production:** the read-only service account, per-group authorized views and the prompt rules each stop a different failure.
+- **Writes are blocked outside the code too:** the sqlglot check accepts a single `SELECT` only, and the agent's service account holds just BigQuery Data Viewer and BigQuery Job User. Even if the validator missed a `DELETE`, `UPDATE`, `DROP` or `INSERT`, BigQuery would reject it for lack of permission.
 
 **Layers of protection against personal data.**
 No single technique is enough, so each layer covers what the one before can miss.
