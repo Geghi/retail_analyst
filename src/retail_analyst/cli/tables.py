@@ -4,11 +4,11 @@ from pathlib import Path
 INLINE_ROWS = 10
 
 
-def _is_number(value) -> bool:
+def is_number(value) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool)
 
 
-def _format(value) -> str:
+def format_value(value) -> str:
     if value is None:
         return "-"
     if isinstance(value, float):
@@ -21,7 +21,7 @@ def _format(value) -> str:
 def render_table(rows: list[dict], max_rows: int = INLINE_ROWS) -> str:
     columns = list(rows[0])
     shown = rows[:max_rows]
-    cells = [[_format(row.get(name)) for name in columns] for row in shown]
+    cells = [[format_value(row.get(name)) for name in columns] for row in shown]
     widths = [max(len(name), *(len(line[i]) for line in cells)) for i, name in enumerate(columns)]
 
     def line(parts: list[str], numeric: list[bool]) -> str:
@@ -35,7 +35,7 @@ def render_table(rows: list[dict], max_rows: int = INLINE_ROWS) -> str:
         line(["-" * w for w in widths], [False] * len(columns)),
     ]
     for row, parts in zip(shown, cells, strict=True):
-        text.append(line(parts, [_is_number(row.get(name)) for name in columns]))
+        text.append(line(parts, [is_number(row.get(name)) for name in columns]))
     if len(rows) > max_rows:
         text.append(f"... {len(rows) - max_rows} more rows (/export saves them all)")
     return "\n".join(text)

@@ -26,6 +26,7 @@ A command-line assistant over the public BigQuery dataset `bigquery-public-data.
 An executive asks a question, the agent writes the SQL, runs it, and explains the result.
 
 - **Analysis in plain language:** customer behaviour, product performance, time-based metrics and multi-step questions ("why did revenue change, and which category drove it?").
+- **A readable terminal:** answers are rendered as formatted text, tables are aligned, refusals and errors have their own colors, and `/trace` highlights the SQL. Piped output, `NO_COLOR` and the tests get plain text.
 - **Answer and table side by side:** the explanation comes from the model, the table is built by code from the returned rows, so the numbers are never retyped.
 - **Reports with action items**, saved per user, deleted only after an explicit confirmation.
 - **Safe by construction:** SQL is validated by code, personal data is blocked and masked, and each user sees only the products assigned to them.

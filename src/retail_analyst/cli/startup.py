@@ -9,6 +9,7 @@ from retail_analyst import settings, storage
 from retail_analyst.agent import Agent, AgentDeps
 
 from .chat import run_chat
+from .view import RichView, choose_view
 
 REQUIRED_ENV = (
     "GEMINI_API_KEY",
@@ -47,8 +48,11 @@ def main(
     except psycopg.Error:
         write("Cannot reach the reports database. Start it with: docker compose up -d db")
         return 1
-    write(f"Chatting as {args.user}. Type /trace, /reports, or exit.")
-    run_chat(Agent(args.user, AgentDeps(conn=conn)), read=read, write=write)
+    view = choose_view(write)
+    if isinstance(view, RichView) and read is input:
+        read = view.read
+    view.greeting(args.user)
+    run_chat(Agent(args.user, AgentDeps(conn=conn)), read=read, write=write, view=view)
     return 0
 
 

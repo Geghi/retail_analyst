@@ -6,7 +6,8 @@ import psycopg
 from retail_analyst import observability, reports
 from retail_analyst.agent import Agent
 
-from .tables import export_tables, render_table
+from .tables import export_tables
+from .view import PlainView
 
 EXIT_WORDS = {"exit", "quit"}
 PROMPT = "you> "
@@ -21,7 +22,9 @@ def run_chat(
     read: Callable[[str], str] = input,
     write: Callable[[str], None] = print,
     export_dir: Path = Path("exports"),
+    view=None,
 ):
+    view = view or PlainView(write)
     last_trace_id = None
     last_tables: tuple = ()
     while True:
@@ -32,17 +35,16 @@ def run_chat(
         if line.lower() in EXIT_WORDS:
             return
         if line == "/trace":
-            write(show_trace(agent, last_trace_id))
+            show_trace(view, agent, last_trace_id)
         elif line == "/reports":
-            write(show_reports(agent))
+            show_reports(view, agent)
         elif line == "/export":
-            write(export_last(agent, last_tables, last_trace_id, export_dir))
+            view.notice(export_last(agent, last_tables, last_trace_id, export_dir))
         elif line:
-            reply = agent.respond(line)
+            with view.thinking():
+                reply = agent.respond(line)
             last_trace_id, last_tables = reply.trace_id, reply.tables
-            write(reply.text)
-            for table in reply.tables:
-                write(render_table(table))
+            view.answer(reply)
 
 
 def export_last(agent: Agent, tables: tuple, trace_id: str | None, directory: Path) -> str:
@@ -52,17 +54,20 @@ def export_last(agent: Agent, tables: tuple, trace_id: str | None, directory: Pa
     return "Saved:\n" + "\n".join(f"  {path}" for path in saved)
 
 
-def show_trace(agent: Agent, trace_id: str | None) -> str:
+def show_trace(view, agent: Agent, trace_id: str | None) -> None:
     if trace_id is None:
-        return NO_TRACE
-    return observability.format_trace(observability.read_trace(trace_id, agent.deps.log_path))
+        view.notice(NO_TRACE)
+        return
+    view.trace(observability.read_trace(trace_id, agent.deps.log_path))
 
 
-def show_reports(agent: Agent) -> str:
+def show_reports(view, agent: Agent) -> None:
     try:
         saved = reports.list_reports(agent.deps.conn, agent.user_id)
     except psycopg.Error:
-        return REPORTS_DOWN
+        view.notice(REPORTS_DOWN)
+        return
     if not saved:
-        return NO_REPORTS
-    return "\n".join(f"- {report.title} ({report.created_at:%Y-%m-%d})" for report in saved)
+        view.notice(NO_REPORTS)
+        return
+    view.reports([(report.title, report.created_at) for report in saved])
