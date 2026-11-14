@@ -20,10 +20,9 @@ Four properties shape the whole design:
 ```mermaid
 flowchart LR
   EXEC["Executive"] --> UI["Chat UI or CLI"]
-  UI -->|"HTTPS + identity token"| GW["API gateway"]
-  GW --> AG["Agent service - LangGraph on Cloud Run"]
+  UI -->|"HTTPS + SSE, Google ID token + BigQuery access token, IAP"| AG["Agent service - LangGraph on Cloud Run"]
   AG --> GEM["Gemini - Vertex AI"]
-  AG --> BQ[("BigQuery - read only")]
+  AG -->|"with the user's token"| BQ[("BigQuery - PII-free views + row-level security")]
   AG --> PG[("Postgres + pgvector")]
   AG --> CFG[("Config store")]
   GCS[("Golden bucket - Cloud Storage")] -->|"ingestion job"| PG
@@ -38,25 +37,25 @@ The detailed diagram, with the internals of the agent service and the learning l
 
 | From → to | Protocol | Authentication |
 | --------- | -------- | -------------- |
-| UI → gateway | HTTPS and JSON, server-sent events for streaming answers | OIDC identity token of the executive |
-| Gateway → agent service | HTTPS to Cloud Run | Service-to-service identity, user id passed as a verified claim |
-| Agent → Gemini | Vertex AI API over HTTPS | Service account, no key in the image |
-| Agent → BigQuery | BigQuery API over HTTPS, a dry run before each query | Read-only service account |
+| UI → agent service | HTTPS and JSON to Cloud Run, server-sent events for streaming answers | Google sign-in: the executive's Google ID token and an OAuth access token with a BigQuery scope. IAP admits only the company Workspace domain. |
+| Agent → Gemini | Vertex AI API over HTTPS | Agent service account, no key in the image |
+| Agent → BigQuery | BigQuery API over HTTPS, a dry run before each query, job labels with the trace id and user id | The executive's own short-lived access token. The agent service account has no BigQuery data access. |
 | Agent → Postgres | SQL over TLS on a private address through the Cloud SQL connector | IAM database authentication |
-| Agent → config store | Read at every turn, cached for a few seconds | Service account |
+| Agent → config store | Read at every turn, cached for a few seconds | Agent service account |
 | Ingestion job → bucket and Postgres | Cloud Storage API and SQL | Service account |
-| Agent → observability | OpenTelemetry (OTLP) to a collector, after the PII scrubber | Service account |
+| Offline jobs → BigQuery | BigQuery API over HTTPS | Offline service account, read access to the PII-free views only |
+| Agent → observability | OpenTelemetry (OTLP) to a collector, after the PII scrubber | Agent service account |
 
 ### Components and why
 
 | Block | Choice | Why |
 | ----- | ------ | --- |
 | Front end | Web chat in production, CLI in the prototype | The agent core is a library with no UI code, so a new front end is a thin adapter. |
-| API gateway | Managed gateway with OIDC identity tokens | The user id comes from a verified token and is never taken from the model or the request body. |
+| Identity | Google sign-in in the web chat, Identity-Aware Proxy (IAP) in front of Cloud Run | IAP lets only the company Workspace domain reach the service. The agent service verifies the Google ID token itself with the `google-auth` library, so the user id comes from a verified token and is never taken from the model or the request body. The OAuth access token, with a BigQuery scope, runs each BigQuery job as the executive. The agent does not store refresh tokens. |
 | Agent service | Python on Cloud Run, stateless | Scales to zero, scales out per request, and keeps conversation state in Postgres so any instance can serve any turn. |
 | LLM | Gemini through Vertex AI in production, AI Studio key in the prototype | The brief asks for Gemini. Vertex AI adds IAM, quotas per project and regional control. A Flash-class model plans the queries and writes the answer, a Flash-Lite model is the fallback, and a Pro-class model is used for long reports only if the evaluation set shows a gain. Model names are configuration, never code. |
 | Agent framework | LangGraph state graph | The flow has branches (analysis, report, delete, direct reply), a correction loop and a pause for human confirmation. LangGraph provides these as primitives: conditional edges, per-node retry policies, `interrupt` for the confirmation, a checkpointer that keeps each conversation's state by thread id, and callbacks for tracing. |
-| Warehouse | BigQuery through a `BigQueryClient`, read-only service account | The data already lives there. The client runs a dry run before every query, refuses queries above the byte cap, maps Google errors to typed errors and returns JSON-friendly rows. The service account can run queries and cannot write. |
+| Warehouse | BigQuery through a `BigQueryClient`, each job run with the executive's own token on PII-free views with row-level security | The data already lives there. The client runs a dry run before every query, refuses queries above the byte cap, labels each job with the trace id and user id, maps Google errors to typed errors and returns JSON-friendly rows. Executives can read the views and cannot write. |
 | State | Cloud SQL Postgres with the `pgvector` extension | Saved reports, pending deletions, conversation checkpoints, preferences and the knowledge index in one engine. |
 | Golden bucket | Cloud Storage, versioned | The source of truth for the analysts' trios. Files are reviewable and recoverable. |
 | Config store | Versioned documents in a bucket or database | Persona text, metric definitions and user scopes change without a deploy. |
@@ -65,10 +64,10 @@ The detailed diagram, with the internals of the agent service and the learning l
 
 ## 3. Request flow
 
-1. The gateway verifies the identity token and passes a trusted user id to the agent service.
+1. The agent service verifies the Google ID token with `google-auth` to get a trusted user id, and keeps the executive's short-lived BigQuery access token for this request only.
 2. `load_context` loads the user's product scope, the persona text, a calendar of ready-made date ranges built in code from today's date, and the most similar approved trios for the question. The calendar is placed first in the prompt, and a named period ("this month", "January last year", "the same days last year") is copied from it, so the model never works out a date itself.
 3. `plan` is the first Gemini call. It receives the question, the conversation so far, the schema description, the metric definitions and the trios, and replies with one JSON object holding an intent and, for an analysis, the SQL queries. The intents are analysis, schema question, greeting, save report, delete reports and other. Other (off-topic requests, requests for personal data, attempts to override instructions) ends in a polite refusal with no further model call.
-4. `run_queries` checks every query deterministically: a single `SELECT`, allowed tables only, no personal columns, and a rewrite so only the user's products are visible. The `BigQueryClient` then runs a dry run to estimate cost, refuses an over-budget query and executes the rest. Returned rows pass through result masking as a second line of defense.
+4. `run_queries` checks every query deterministically: a single `SELECT`, allowed tables only, no personal columns, and a rewrite so only the user's products are visible. The `BigQueryClient` then runs a dry run to estimate cost, refuses an over-budget query and executes the rest. In production both run with the executive's token, so BigQuery applies the PII-free views and the row-level policies of the executive's group as well. Returned rows pass through result masking as a second line of defense.
 5. A rejected or failing query goes back to `plan` together with the error, for at most two corrections. An empty result gives the model one hint to broaden the query. After the limit the user gets a friendly message.
 6. `analyze` is the second Gemini call. It receives the masked rows as untrusted data and writes the answer or report, separating observed facts from hypotheses. It may ask for follow-up queries, which run through the same checks, for up to three query rounds in total. The prompt states how many rows of each result the model sees out of how many exist, and the model must say when a result was cut.
 7. Schema questions and greetings are answered directly from the plan, with no query.
@@ -81,7 +80,7 @@ The detailed diagram, with the internals of the agent service and the learning l
 
 | Data | Store | Notes |
 | ---- | ----- | ----- |
-| Raw transactions | BigQuery | Never copied. The agent only reads aggregates. |
+| Raw transactions | BigQuery | Never copied out of BigQuery. The agent only reads aggregates, through the PII-free views. |
 | Saved reports, pending deletions | Postgres | Owned by one user. Deletion is soft and recoverable for 30 days. |
 | Conversation state | Postgres (LangGraph checkpointer) | Needed for "delete the reports from this conversation" and for follow-up questions. |
 | User preferences | Postgres | Section 5.4. |
@@ -112,18 +111,20 @@ Security is enforced by code around the model, never by the prompt.
 - **Input safety:** only analysis questions are answered. Other requests, attempts to reveal instructions and attempts to widen access are refused.
 - **SQL guardrails:** one `SELECT` on the four tables only. Personal columns (names, emails, street address, postal code, coordinates) are refused wherever they appear. City, state and country are allowed only as grouping dimensions of aggregates.
 - **Product scoping:** after the model writes the SQL, `products` and `order_items` are replaced by filtered subqueries that contain only the user's categories. The model cannot widen this, whatever it writes.
-- **Known limit:** `orders` and `users` are not product-scoped, so an order count across all products could be inferred. In production the scoping moves into BigQuery as authorized views with row-level access policies per executive group.
+- **Prototype limit:** the code rewrite does not product-scope `orders` and `users`, so an order count across all products could be inferred. In production row-level access policies on `orders`, `users` and `order_items` scope them too.
 - **Result masking:** values that look like emails or phone numbers are redacted from returned rows, as a second line of defense.
-- **Identity:** the user id comes from the verified token and is passed to every tool by the service, never by the model.
-- **Defence in depth in production:** the read-only service account, per-group authorized views and the prompt rules each stop a different failure.
-- **Writes are blocked outside the code too:** the sqlglot check accepts a single `SELECT` only, and the agent's service account holds just BigQuery Data Viewer and BigQuery Job User. Even if the validator missed a `DELETE`, `UPDATE`, `DROP` or `INSERT`, BigQuery would reject it for lack of permission.
+- **Identity:** the agent service verifies the Google ID token itself with `google-auth`. The user id comes from that verified token and is passed to every tool by the service, never by the model. In production every BigQuery job runs with the executive's own short-lived access token, sent by the web chat with each request. The agent does not store refresh tokens. Because jobs run as the executive, BigQuery's audit logs, cost and quotas are per user, and each job carries labels with the trace id and user id.
+- **BigQuery is the boundary in production:** executives belong to Google groups, one per scope (for example one per set of product categories). A group holds BigQuery Job User and Data Viewer only on views in our own project that leave out personal columns (names, emails, street address, postal code, coordinates), or on tables whose personal columns are protected by policy tags. Row-level access policies on the tables limit each group to its products. An executive could open the BigQuery console with their own identity, so BigQuery is the real PII and scope boundary. The sqlglot validator and the query rewrite stay as the first layer (friendly refusals, the cost cap, no write statements), not the only one.
+- **Own tables in production:** row-level access policies apply to tables, not views, and cannot be added on `bigquery-public-data`. Production uses the company's own tables, or copies, in our project. The prototype reads the public dataset and relies on the code rewrite.
+- **Defence in depth in production:** the executive's BigQuery permissions (PII-free views, row-level policies), the code validator and rewrite, result masking and the prompt rules each stop a different failure.
+- **Writes are blocked outside the code too (production):** the sqlglot check accepts a single `SELECT` only, and executive identities hold just BigQuery Job User and Data Viewer on the views. Even if the validator missed a `DELETE`, `UPDATE`, `DROP` or `INSERT`, BigQuery would reject it for lack of permission. The prototype runs with the developer's own `gcloud` login, so there the validator is the only block.
 
 **Layers of protection against personal data.**
 No single technique is enough, so each layer covers what the one before can miss.
 
 | Layer | What it does | Prototype | Production |
 | ----- | ------------ | --------- | ---------- |
-| 1. Structure | Blocked columns, geography only inside aggregates, product scope | Yes | Yes, plus authorized views in BigQuery |
+| 1. Structure | Blocked columns, geography only inside aggregates, product scope | Yes | Yes, plus PII-free views or policy tags and row-level access policies in BigQuery, enforced on the executive's own identity |
 | 2. Pattern rules | Emails and phone numbers are redacted from result rows and from everything written to a trace | Yes | Yes |
 | 3. NER scrubber | A model detects names, addresses and identifiers in free text: the user's messages, the model's answers, the traces | No | Yes, running inside the agent service |
 | 4. Managed inspection | Cloud Sensitive Data Protection scans stored reports and the log pipeline | No | Optional second opinion |
@@ -189,7 +190,7 @@ Each layer handles what it can and passes a typed error upward. The agent turns 
 
 Costs are bounded: retries and corrections have hard limits, the byte cap protects BigQuery, and a turn has a ceiling on model calls.
 Raw exceptions never reach the user. They are logged with the trace id.
-In production a circuit breaker stops calling a failing dependency for a short period, and requests are rate-limited per user.
+In production a circuit breaker stops calling a failing dependency for a short period, and per-user limits hold: BigQuery quotas per user, the dry-run byte cap, the cap on model calls per turn, and a request rate limit per user kept as a counter in Postgres.
 
 ### 5.6 Quality assurance
 
@@ -253,18 +254,21 @@ Sending a report by email, for example, would use the same request-then-confirm 
 - **Networking:** private connectivity to Cloud SQL, outbound only to Vertex AI and BigQuery.
 - **Environments:** development, staging and production, each with its own project and service accounts.
 - **Delivery:** the container is built once and promoted. The evaluation set is the gate between staging and production.
-- **Scaling:** stateless instances, so scaling is by request count. BigQuery cost is controlled per query and per user.
+- **Scaling:** stateless instances, so scaling is by request count. BigQuery cost is controlled per query by the dry-run byte cap, and per user because jobs run as the executive: BigQuery custom quotas cap the bytes each user can scan per day, and billing shows the cost per user.
 - **Cost levers:** a cheaper model for planning and routing, caching of repeated aggregate queries for a short time, and the byte cap.
 
 ### Secrets and identity
 
-No credential file exists in production. Services prove who they are with the identity of the platform they run on.
+No credential file exists in production. Services prove who they are with the identity of the platform they run on, and executives' queries run with the executive's own Google identity.
 
 | What | How in production | Prototype |
 | ---- | ----------------- | --------- |
-| Google access (BigQuery, Vertex AI, Cloud SQL) | A dedicated service account attached to the Cloud Run service. The client libraries find it on their own, so there is no key file to store or leak. | The developer's own `gcloud` login (found automatically when run locally, mounted read-only into the container in Docker) |
-| Roles of that account | BigQuery Job User on the project, Data Viewer only on the authorized views, Vertex AI User, Cloud SQL Client. Nothing can write to the warehouse. | The developer's own permissions |
-| Values that must exist (third-party API keys, a database password if one is used) | Secret Manager, read by the service account at start-up or mounted by Cloud Run as an environment variable. Access is granted per secret, logged, and rotated without a deploy. | The local env file |
+| Google access of the agent (Vertex AI, Cloud SQL, config store, Secret Manager) | A dedicated agent service account attached to the Cloud Run service. The client libraries find it on their own, so there is no key file to store or leak. It has no BigQuery data access for user queries. | The developer's own `gcloud` login (found automatically when run locally, mounted read-only into the container in Docker) |
+| BigQuery for user queries | The executive's short-lived OAuth access token from Google sign-in, sent by the web chat with each request. The agent does not store refresh tokens. | The same developer login |
+| Roles of the agent service account | Vertex AI User, Cloud SQL Client, read access to the config store, Secret Manager access to its own secrets. No BigQuery data roles. | The developer's own permissions |
+| Roles of executive identities | Through one Google group per scope: BigQuery Job User on the project and Data Viewer only on the PII-free views. Row-level access policies grant each group its products. Nothing can write to the warehouse. | Simulated executives in a config file |
+| Roles of the offline service account | Used by the learning loop, trio validation and the evaluation set. BigQuery Job User and Data Viewer on the PII-free views only, with a row-level policy that lets it see all products. | Not applicable |
+| Values that must exist (third-party API keys, a database password if one is used) | Secret Manager, read by the agent service account at start-up or mounted by Cloud Run as an environment variable. Access is granted per secret, logged, and rotated without a deploy. | The local env file |
 | Database login | IAM database authentication, so there is no password | A throwaway password on a local container |
 | Build pipeline | Workload Identity Federation from the CI system, with service account key creation disabled by organization policy | Not applicable |
 
@@ -276,8 +280,8 @@ An image never contains a secret: the build copies only code and configuration, 
 | ---- | --------- | ---------- |
 | Front end | CLI | Web chat behind an API |
 | Packaging | Docker Compose: app container and Postgres | Container image on Cloud Run |
-| Identity | Simulated executives in a config file | Identity provider token |
-| Product scope | Query rewrite in code | Same, plus BigQuery authorized views |
+| Identity | Simulated executives in a config file, queries run with the developer's `gcloud` login | Google sign-in, BigQuery jobs run with the executive's own access token |
+| Product scope | Query rewrite in code | Same, plus row-level access policies per Google group and PII-free views in BigQuery |
 | LLM | Gemini through an AI Studio key, with a fallback model | Gemini on Vertex AI |
 | Agent state | In-memory checkpointer, one process | Postgres checkpointer |
 | Golden retrieval | Word overlap over a few files | `pgvector` over an approved bucket |

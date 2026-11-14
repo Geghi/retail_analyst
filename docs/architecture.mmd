@@ -3,9 +3,8 @@ flowchart LR
     EXEC["Executive"] --> UI["Chat UI or CLI"]
   end
 
-  UI -->|"HTTPS + identity token"| GW["API gateway: auth, rate limit, user id"]
-
   subgraph Agent["Agent service - LangGraph state graph, Cloud Run, stateless"]
+    AUTH["verify Google ID token (google-auth), per-user rate limit"]
     LOAD["load_context: user scope, persona, similar trios"]
     PLAN["plan: Gemini call 1, intent and SQL as JSON"]
     RUN["run_queries: guardrails, product scope, cost cap, execute, mask"]
@@ -22,9 +21,9 @@ flowchart LR
     TOOLS["Tool registry: charts, email, web search (future)"]
     BQC["BigQueryClient: dry-run byte cap, typed errors, JSON rows"]
   end
-
-  GW --> LOAD --> PLAN
-  ANA -->|"answer text + result tables"| GW
+  UI -->|"HTTPS, Google ID token + BigQuery access token, IAP on the Workspace domain"| AUTH
+  AUTH --> LOAD --> PLAN
+  ANA -->|"answer text + result tables, server-sent events"| UI
   PLAN -->|"analysis"| RUN
   PLAN -->|"schema question, greeting"| DIRECT
   PLAN -->|"other"| REFUSE
@@ -41,7 +40,7 @@ flowchart LR
   ANA -. uses .-> LLMC
   LLMC -->|"HTTPS, Vertex AI API"| GEM["Gemini - Vertex AI"]
   RUN -->|"retried 3 times if the warehouse is unavailable"| BQC
-  BQC -->|"BigQuery API, dry run first"| BQ[("BigQuery: thelook_ecommerce, read-only service account")]
+  BQC -->|"BigQuery API with the user's token, dry run first, job labels"| BQ[("BigQuery: PII-free views + row-level security per Google group")]
   CONFIRM -.-> CKPT
 
   subgraph Data["State"]
@@ -49,7 +48,7 @@ flowchart LR
     GCS[("Cloud Storage: Golden bucket, versioned trios")]
     CFG[("Config store: persona text, metric definitions, user scopes, prices")]
   end
-
+  AUTH -->|"rate-limit counter"| PG
   LOAD -->|"top 3 similar trios"| PG
   SAVE --> PG
   CONFIRM -->|"confirmed: soft delete"| PG
@@ -63,6 +62,7 @@ flowchart LR
     EVAL --> REV["Analyst approval"]
     REV --> GCS
   end
+  EVAL -->|"offline service account, PII-free views only"| BQ
 
   Agent -->|"OTLP, scrubbed"| OBS["OpenTelemetry traces, metrics, logs"]
   OBS --> LF["Langfuse: LLM traces, tokens, cost, evals"]
