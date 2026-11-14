@@ -175,20 +175,6 @@ Set `TRACE_VERBOSE=1` to also record each prompt, each raw model answer and the 
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  EXEC["Executive"] --> UI["Chat UI or CLI"]
-  UI -->|"HTTPS + SSE, Google ID token + BigQuery access token, IAP"| AG["Agent service - LangGraph on Cloud Run"]
-  AG --> GEM["Gemini - Vertex AI"]
-  AG -->|"with the user's token"| BQ[("BigQuery - PII-free views + row-level security")]
-  AG --> PG[("Postgres + pgvector")]
-  AG --> CFG[("Config store")]
-  GCS[("Golden bucket - Cloud Storage")] -->|"ingestion job"| PG
-  AG --> OBS["OpenTelemetry"]
-  OBS --> CT["Cloud Trace and Cloud Logging"]
-  OBS --> MON["Cloud Monitoring"]
-```
-
 Inside the agent, a LangGraph state graph runs `load_context → plan → run_queries → analyze`, with branches for schema questions, refusals, saving reports and confirmed deletion.
 
 - **Full diagram:** [`docs/architecture.mmd`](docs/architecture.mmd)
