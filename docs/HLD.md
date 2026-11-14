@@ -41,7 +41,7 @@ The detailed diagram, with the internals of the agent service and the learning l
 | Agent → Gemini | Vertex AI API over HTTPS | Agent service account, no key in the image |
 | Agent → BigQuery | BigQuery API over HTTPS, a dry run before each query, job labels with the trace id and user id | The executive's own short-lived access token. The agent service account has no BigQuery data access. |
 | Agent → Postgres | SQL over TLS on a private address through the Cloud SQL connector | IAM database authentication |
-| Agent → config store | Read at every turn, cached for a few seconds | Agent service account |
+| Agent → config store | Fetched at every turn through a cache of a few seconds, so a change is live within seconds | Agent service account |
 | Ingestion job → bucket and Postgres | Cloud Storage API and SQL | Service account |
 | Offline jobs → BigQuery | BigQuery API over HTTPS | Offline service account, read access to the PII-free views only |
 | Agent → observability | OpenTelemetry (OTLP) to a collector, after the PII scrubber | Agent service account |
@@ -258,7 +258,7 @@ The model is free inside an analysis, where `analyze` decides on its own whether
 
 ## 7. Production deployment
 
-- **Compute:** Cloud Run for the agent service, a Cloud Run job for knowledge ingestion.
+- **Compute:** Cloud Run for the agent service, a Cloud Run job for knowledge ingestion, and a daily Cloud Run job started by Cloud Scheduler that purges reports deleted more than 30 days ago.
 - **Networking:** private connectivity to Cloud SQL, outbound only to Vertex AI and BigQuery.
 - **Environments:** development, staging and production, each with its own project and service accounts.
 - **Delivery:** the container is built once and promoted. The evaluation set is the gate between staging and production.
@@ -307,6 +307,7 @@ An image never contains a secret: the build copies only code and configuration, 
 | Golden retrieval | Word overlap over a few files | Hybrid `pgvector` and full-text search over an approved bucket |
 | Result display | Answer text plus tables in the terminal, `/export` writes CSV files | Same, rendered in the web chat with download |
 | PII beyond structure | Pattern rules on rows and traces | Adds secret redaction on the user's message, the `user_id` and geography rule, the minimum group size, the NER scrubber once there is free text, and optional managed inspection |
+| Restore and purge | Restore and purge exist in the reports store, with no chat command or schedule | A restore action in the web chat and the daily purge job |
 | Deletion confirmation | The graph pauses with an `interrupt` and the user types yes or no. Any other answer repeats the question. | A card with Delete and Cancel buttons; the user can keep asking questions while it is open |
 | Observability | Local JSON log with tokens and cost per call, trace command | OpenTelemetry to Cloud Trace, Cloud Logging and Cloud Monitoring |
 | Persona | File read at every turn | Versioned store with an admin page |

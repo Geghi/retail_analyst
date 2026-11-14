@@ -3,13 +3,14 @@ flowchart LR
     EXEC["Executive"] --> UI["Chat UI or CLI"]
   end
 
-  subgraph Agent["Agent service - LangGraph state graph, Cloud Run, stateless"]
+  subgraph Agent["Agent service - LangGraph state graph on Cloud Run, conversation state in Postgres"]
     AUTH["verify Google ID token (google-auth), per-user rate limit"]
+    REDACT["redact secrets in the message: cards, IBANs, keys, tokens"]
     LOAD["load_context: user scope, persona, similar trios"]
     PLAN["plan: Gemini call 1, intent and SQL as JSON"]
     RUN["run_queries: guardrails, product scope, cost cap, execute, mask"]
     ANA["analyze: Gemini call 2, answer and optional follow-up queries"]
-    DIRECT["direct reply: schema question or greeting"]
+    DIRECT["schema_answer: schema question or greeting"]
     REFUSE["refuse: off-topic or personal data"]
     SAVE["save_report"]
     REQDEL["request_delete: list matching reports"]
@@ -17,13 +18,15 @@ flowchart LR
     GIVEUP["give_up: friendly message after the correction limit"]
     CKPT["Checkpointer: one thread per conversation"]
     LLMC["Gemini client: timeout, retries, fallback model, circuit breaker"]
-    SCRUB["PII scrubber: pattern rules and NER model, on rows and on traces"]
+    SCRUB["PII scrubber: pattern rules on rows and traces, NER on answers and traces"]
     TOOLS["Future intents: charts, email, web search"]
     BQC["BigQueryClient: dry-run byte cap, typed errors, JSON rows"]
   end
   UI -->|"HTTPS, Google ID token + BigQuery access token, IAP on the Workspace domain"| AUTH
-  AUTH --> LOAD --> PLAN
+  AUTH --> REDACT --> LOAD --> PLAN
   ANA -->|"answer text + result tables, server-sent events"| UI
+  DIRECT & REFUSE & SAVE & GIVEUP & CONFIRM -->|"reply"| UI
+  UI -->|"Delete or Cancel button with the pending deletion id"| CONFIRM
   PLAN -->|"analysis"| RUN
   PLAN -->|"schema question, greeting"| DIRECT
   PLAN -->|"other"| REFUSE
@@ -48,10 +51,11 @@ flowchart LR
     CFG[("Config store: persona text, metric definitions, user scopes, prices")]
   end
   AUTH -->|"rate-limit counter"| PG
-  LOAD -->|"top 3 similar trios"| PG
+  LOAD -->|"hybrid search: top 3 trios"| PG
   SAVE --> PG
   CONFIRM -->|"confirmed: soft delete"| PG
   CKPT --> PG
+  PURGE["Daily purge job: reports deleted over 30 days ago"] --> PG
   LOAD -->|"read at every turn"| CFG
   GCS -->|"ingestion job: validate, embed, index"| PG
 
