@@ -178,10 +178,9 @@ Set `TRACE_VERBOSE=1` to also record each prompt, each raw model answer and the 
 ```mermaid
 flowchart LR
   EXEC["Executive"] --> UI["Chat UI or CLI"]
-  UI -->|"HTTPS + identity token"| GW["API gateway"]
-  GW --> AG["Agent service - LangGraph on Cloud Run"]
+  UI -->|"HTTPS + SSE, Google ID token + BigQuery access token, IAP"| AG["Agent service - LangGraph on Cloud Run"]
   AG --> GEM["Gemini - Vertex AI"]
-  AG --> BQ[("BigQuery - read only")]
+  AG -->|"with the user's token"| BQ[("BigQuery - PII-free views + row-level security")]
   AG --> PG[("Postgres + pgvector")]
   AG --> CFG[("Config store")]
   GCS[("Golden bucket - Cloud Storage")] -->|"ingestion job"| PG
@@ -250,7 +249,7 @@ The acceptance scenarios (revenue question, schema question, personal-data refus
 
 ## Known limits
 
-- **Scope on `orders` and `users`:** the product filter is applied to `products` and `order_items`. Those two tables have no category, so counts taken directly from them are not narrowed per user. In production the scope moves into BigQuery as authorized views.
+- **Scope on `orders` and `users`:** the product filter is applied to `products` and `order_items`. Those two tables have no category, so counts taken directly from them are not narrowed per user. In production row-level access policies on `orders`, `users` and `order_items` scope them too.
 - **Prototype storage:** the conversation state is kept in memory for one process, and the sample "trios" are ranked by word overlap. The design uses a Postgres checkpointer and `pgvector`.
 - **Model size:** smaller Gemini models are faster and cheaper but follow long instructions less reliably; the checks around the model are what keep the answers correct.
 - **Synthetic data:** `thelook_ecommerce` is generated data, so large month-to-month jumps can be artefacts of the generator.
