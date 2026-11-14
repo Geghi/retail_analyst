@@ -1,81 +1,17 @@
 flowchart LR
-  subgraph Client["Client"]
-    EXEC["Executive"] --> UI["Chat UI or CLI"]
-  end
+  EXEC["Executive"] <-->|"Chat, answers and delete confirmation"| UI["Web chat"]
+  UI <-->|"HTTPS / streaming, Google identity"| AGENT["Agent service<br/>LangGraph on Cloud Run<br/>Guardrails, masking and confirmation"]
 
-  subgraph Agent["Agent service - LangGraph state graph on Cloud Run, conversation state in Postgres"]
-    AUTH["verify Google ID token (google-auth), per-user rate limit"]
-    REDACT["redact secrets in the message: cards, IBANs, keys, tokens"]
-    LOAD["load_context: user scope, persona, similar trios"]
-    PLAN["plan: Gemini call 1, intent and SQL as JSON"]
-    RUN["run_queries: guardrails, product scope, cost cap, execute, mask"]
-    ANA["analyze: Gemini call 2, answer and optional follow-up queries"]
-    DIRECT["schema_answer: schema question or greeting"]
-    REFUSE["refuse: off-topic or personal data"]
-    SAVE["save_report"]
-    REQDEL["request_delete: list matching reports"]
-    CARD["Show matching reports on a confirmation card; wait for user action"]
-    CONFIRM["Validate pending request: owner, expiry and single use"]
-    GIVEUP["give_up: friendly message after the correction limit"]
-    CKPT["Checkpointer: one thread per conversation"]
-    LLMC["Gemini client: timeout, retries, fallback model, circuit breaker"]
-    ROWMASK["Result masking: pattern rules on rows"]
-    SCRUB["Answer scrubber: NER when free-text data is present"]
-    TOOLS["Future intents: charts, email, web search"]
-    BQC["BigQueryClient: dry-run byte cap, typed errors, JSON rows"]
-  end
-  UI -->|"HTTPS, Google ID token + BigQuery access token, IAP on the Workspace domain"| AUTH
-  AUTH --> REDACT --> LOAD --> PLAN
-  ANA -->|"answer text + masked result tables"| SCRUB
-  DIRECT & REFUSE & SAVE & GIVEUP & CONFIRM -->|"reply"| SCRUB
-  SCRUB -->|"scrubbed reply, server-sent events"| UI
-  CARD -->|"show card"| UI
-  UI -->|"Delete or Cancel button with the pending deletion id"| CONFIRM
-  PLAN -->|"analysis"| RUN
-  PLAN -->|"schema question, greeting"| DIRECT
-  PLAN -->|"other"| REFUSE
-  PLAN -->|"save report"| SAVE
-  PLAN -->|"delete reports"| REQDEL --> CARD
-  RUN -->|"rows"| ROWMASK
-  ROWMASK -->|"masked rows"| ANA
-  PLAN -.->|"new intents"| TOOLS
-  TOOLS -.->|"send or delete: request, then confirm"| CONFIRM
-  RUN -->|"error: up to 2 corrections"| PLAN
-  RUN -->|"limit reached"| GIVEUP
-  ANA -->|"follow-up queries: at most 3 query rounds total, including the initial round"| RUN
-  PLAN -. uses .-> LLMC
-  ANA -. uses .-> LLMC
-  LLMC -->|"HTTPS, Vertex AI API"| GEM["Gemini - Vertex AI"]
-  RUN -->|"retried 3 times if the warehouse is unavailable"| BQC
-  BQC -->|"BigQuery API with the user's token, dry run first, job labels"| BQ[("BigQuery: PII-free views + row-level security per Google group")]
+  AGENT <-->|"Plans and analysis"| LLM["Gemini<br/>Vertex AI"]
+  AGENT -->|"Scoped queries with user identity"| BQ[("BigQuery<br/>PII-free views and row-level security")]
+  AGENT <-->|"Reports, preferences, conversation state and knowledge search"| PG[("Cloud SQL<br/>Postgres + pgvector")]
+  AGENT -->|"Read persona and rules"| CFG[("Config store")]
+  ADMIN["Admin"] -->|"Update persona and rules"| CFG
 
-  subgraph Data["State"]
-    PG[("Cloud SQL Postgres + pgvector: reports, pending deletions, checkpoints, preferences, knowledge index")]
-    GCS[("Cloud Storage: Golden bucket, versioned trios")]
-    CFG[("Config store: persona text, metric definitions, user scopes, prices")]
-  end
-  AUTH -->|"rate-limit counter"| PG
-  LOAD -->|"hybrid search: top 3 trios"| PG
-  SAVE --> PG
-  REQDEL -->|"store pending request and matched reports"| PG
-  CONFIRM -->|"Delete: consume request and soft-delete reports; Cancel: discard request"| PG
-  CKPT --> PG
-  PURGE["Daily purge job: reports deleted over 30 days ago"] --> PG
-  LOAD -->|"read at every turn"| CFG
-  GCS -->|"ingestion job: validate, embed, index"| PG
+  GOLD[("Cloud Storage<br/>Golden Knowledge trios")] -->|"Validate, embed and index"| PG
+  AGENT -->|"Scrubbed traces and metrics"| OBS["Cloud Trace, Logging<br/>and Monitoring"]
+  OBS -->|"Feedback and traces"| REVIEW["Offline evaluation<br/>and analyst approval"]
+  REVIEW -->|"Approved trios"| GOLD
 
-  subgraph Learn["Learning loop - offline"]
-    FB["Feedback and traces"] --> CAND["Candidate trios"]
-    CAND --> EVAL["Automatic checks: SQL runs, numbers match, no PII"]
-    EVAL --> REV["Analyst approval"]
-    REV --> GCS
-  end
-  EVAL -->|"offline service account, PII-free views only"| BQ
-
-  Agent -->|"OTLP: pattern rules on traces, plus NER when free-text data is present"| OBS["OpenTelemetry traces, metrics, logs"]
-  OBS --> CT["Cloud Trace and Cloud Logging: traces, prompts, tokens, cost"]
-  OBS --> MON["Cloud Monitoring: alerts, dashboards"]
-  OBS --> FB
-
-  ADMIN["Admin page: persona text, metric definitions"] --> CFG
-  SM["Secret Manager"] -.-> Agent
+  AGENT -.->|"Credentials"| SECRET["Secret Manager"]
+  JOB["Scheduled purge job<br/>Cloud Run + Cloud Scheduler"] -->|"Purge expired deleted reports"| PG
