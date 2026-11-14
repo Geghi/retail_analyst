@@ -17,21 +17,7 @@ Four properties shape the whole design:
 
 ## 2. Architecture
 
-```mermaid
-flowchart LR
-  EXEC["Executive"] --> UI["Chat UI or CLI"]
-  UI -->|"HTTPS + SSE, Google ID token + BigQuery access token, IAP"| AG["Agent service - LangGraph on Cloud Run"]
-  AG --> GEM["Gemini - Vertex AI"]
-  AG -->|"with the user's token"| BQ[("BigQuery - PII-free views + row-level security")]
-  AG --> PG[("Postgres + pgvector")]
-  AG --> CFG[("Config store")]
-  GCS[("Golden bucket - Cloud Storage")] -->|"ingestion job"| PG
-  AG --> OBS["OpenTelemetry"]
-  OBS --> CT["Cloud Trace and Cloud Logging"]
-  OBS --> MON["Cloud Monitoring"]
-```
-
-The detailed diagram, with the internals of the agent service and the learning loop, is in [architecture.mmd](architecture.mmd).
+The architecture diagram is in [architecture.mmd](architecture.mmd).
 
 ### How the components talk
 
