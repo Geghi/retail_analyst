@@ -14,31 +14,35 @@ flowchart LR
     REFUSE["refuse: off-topic or personal data"]
     SAVE["save_report"]
     REQDEL["request_delete: list matching reports"]
-    CONFIRM["confirm: Delete or Cancel on a card, user can keep asking meanwhile"]
+    CARD["Show matching reports on a confirmation card; wait for user action"]
+    CONFIRM["Validate pending request: owner, expiry and single use"]
     GIVEUP["give_up: friendly message after the correction limit"]
     CKPT["Checkpointer: one thread per conversation"]
     LLMC["Gemini client: timeout, retries, fallback model, circuit breaker"]
-    SCRUB["PII scrubber: pattern rules on rows and traces, NER on answers and traces"]
+    ROWMASK["Result masking: pattern rules on rows"]
+    SCRUB["Answer scrubber: NER when free-text data is present"]
     TOOLS["Future intents: charts, email, web search"]
     BQC["BigQueryClient: dry-run byte cap, typed errors, JSON rows"]
   end
   UI -->|"HTTPS, Google ID token + BigQuery access token, IAP on the Workspace domain"| AUTH
   AUTH --> REDACT --> LOAD --> PLAN
-  ANA -->|"answer text + result tables, server-sent events"| UI
-  DIRECT & REFUSE & SAVE & GIVEUP & CONFIRM -->|"reply"| UI
+  ANA -->|"answer text + masked result tables"| SCRUB
+  DIRECT & REFUSE & SAVE & GIVEUP & CONFIRM -->|"reply"| SCRUB
+  SCRUB -->|"scrubbed reply, server-sent events"| UI
+  CARD -->|"show card"| UI
   UI -->|"Delete or Cancel button with the pending deletion id"| CONFIRM
   PLAN -->|"analysis"| RUN
   PLAN -->|"schema question, greeting"| DIRECT
   PLAN -->|"other"| REFUSE
   PLAN -->|"save report"| SAVE
-  PLAN -->|"delete reports"| REQDEL --> CONFIRM
-  RUN -->|"rows"| SCRUB
-  SCRUB -->|"masked rows"| ANA
+  PLAN -->|"delete reports"| REQDEL --> CARD
+  RUN -->|"rows"| ROWMASK
+  ROWMASK -->|"masked rows"| ANA
   PLAN -.->|"new intents"| TOOLS
   TOOLS -.->|"send or delete: request, then confirm"| CONFIRM
   RUN -->|"error: up to 2 corrections"| PLAN
   RUN -->|"limit reached"| GIVEUP
-  ANA -->|"follow-up queries: up to 3 rounds"| RUN
+  ANA -->|"follow-up queries: at most 3 query rounds total, including the initial round"| RUN
   PLAN -. uses .-> LLMC
   ANA -. uses .-> LLMC
   LLMC -->|"HTTPS, Vertex AI API"| GEM["Gemini - Vertex AI"]
@@ -53,7 +57,8 @@ flowchart LR
   AUTH -->|"rate-limit counter"| PG
   LOAD -->|"hybrid search: top 3 trios"| PG
   SAVE --> PG
-  CONFIRM -->|"confirmed: soft delete"| PG
+  REQDEL -->|"store pending request and matched reports"| PG
+  CONFIRM -->|"Delete: consume request and soft-delete reports; Cancel: discard request"| PG
   CKPT --> PG
   PURGE["Daily purge job: reports deleted over 30 days ago"] --> PG
   LOAD -->|"read at every turn"| CFG
@@ -67,7 +72,7 @@ flowchart LR
   end
   EVAL -->|"offline service account, PII-free views only"| BQ
 
-  Agent -->|"OTLP, scrubbed"| OBS["OpenTelemetry traces, metrics, logs"]
+  Agent -->|"OTLP: pattern rules on traces, plus NER when free-text data is present"| OBS["OpenTelemetry traces, metrics, logs"]
   OBS --> CT["Cloud Trace and Cloud Logging: traces, prompts, tokens, cost"]
   OBS --> MON["Cloud Monitoring: alerts, dashboards"]
   OBS --> FB
