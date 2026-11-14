@@ -27,7 +27,7 @@ flowchart LR
   AG --> CFG[("Config store")]
   GCS[("Golden bucket - Cloud Storage")] -->|"ingestion job"| PG
   AG --> OBS["OpenTelemetry"]
-  OBS --> LF["Langfuse"]
+  OBS --> CT["Cloud Trace and Cloud Logging"]
   OBS --> MON["Cloud Monitoring"]
 ```
 
@@ -54,13 +54,13 @@ The detailed diagram, with the internals of the agent service and the learning l
 | Identity | Google sign-in in the web chat, Identity-Aware Proxy (IAP) in front of Cloud Run | IAP lets only the company Workspace domain reach the service. The agent service verifies the Google ID token itself with the `google-auth` library, so the user id comes from a verified token and is never taken from the model or the request body. The OAuth access token, with a BigQuery scope, runs each BigQuery job as the executive. The agent does not store refresh tokens. |
 | Agent service | Python on Cloud Run, stateless | Scales to zero, scales out per request, and keeps conversation state in Postgres so any instance can serve any turn. |
 | LLM | Gemini through Vertex AI in production, AI Studio key in the prototype | The brief asks for Gemini. Vertex AI adds IAM, quotas per project and regional control. A Flash-class model plans the queries and writes the answer, a Flash-Lite model is the fallback, and a Pro-class model is used for long reports only if the evaluation set shows a gain. Model names are configuration, never code. |
-| Agent framework | LangGraph state graph | The flow has branches (analysis, report, delete, direct reply), a correction loop and a pause for human confirmation. LangGraph provides these as primitives: conditional edges, per-node retry policies, `interrupt` for the confirmation, a checkpointer that keeps each conversation's state by thread id, and callbacks for tracing. |
+| Agent framework | LangGraph state graph | The flow has branches (analysis, report, delete, direct reply), a correction loop and a bounded loop of follow-up queries. LangGraph provides these as primitives: conditional edges, per-node retry policies, a checkpointer that keeps each conversation's state by thread id, and callbacks for tracing. |
 | Warehouse | BigQuery through a `BigQueryClient`, each job run with the executive's own token on PII-free views with row-level security | The data already lives there. The client runs a dry run before every query, refuses queries above the byte cap, labels each job with the trace id and user id, maps Google errors to typed errors and returns JSON-friendly rows. Executives can read the views and cannot write. |
 | State | Cloud SQL Postgres with the `pgvector` extension | Saved reports, pending deletions, conversation checkpoints, preferences and the knowledge index in one engine. The expected knowledge base is hundreds to a few thousand trios, well within `pgvector` and Postgres full-text search, and the permission filter on trios is a plain `WHERE` in the same query. |
 | Golden bucket | Cloud Storage, versioned | The source of truth for the analysts' trios. Files are reviewable and recoverable. |
 | Config store | Versioned documents in a bucket or database | Persona text, metric definitions and user scopes change without a deploy. |
 | Secrets | Secret Manager | Keys never live in images or repositories. |
-| Observability | OpenTelemetry to Langfuse and Cloud Monitoring | See section 5.7. |
+| Observability | OpenTelemetry to Cloud Trace, Cloud Logging and Cloud Monitoring | Traces stay in the project, under the same access control and retention as the data, with no third-party processor. See section 5.7. |
 
 ## 3. Request flow
 
@@ -72,7 +72,7 @@ The detailed diagram, with the internals of the agent service and the learning l
 6. `analyze` is the second Gemini call. It receives the masked rows as untrusted data and writes the answer or report, separating observed facts from hypotheses. It may ask for follow-up queries, which run through the same checks, for up to three query rounds in total. The prompt states how many rows of each result the model sees out of how many exist, and the model must say when a result was cut.
 7. Schema questions and greetings are answered directly from the plan, with no query.
 8. Save report stores the last answer in Postgres for the user and the conversation, titled with the user's question.
-9. Delete reports lists the matching reports and creates a pending deletion. The graph then pauses at `confirm` until the user answers: yes performs the soft delete, no cancels.
+9. Delete reports lists the matching reports and creates a pending deletion. The web chat shows it as a card with Delete and Cancel buttons. The user can keep asking questions while the card is open, and a button press calls the service with the pending deletion id: Delete performs the soft delete, Cancel discards it.
 10. The reply carries the answer text and, next to it, the result tables built by code from the masked rows, so the numbers an executive reads are never retyped by the model. The first rows are shown in the chat and an export saves every row as a CSV file.
 11. Every node emits trace events tagged with one trace id per turn, and the conversation state is checkpointed by thread id.
 
@@ -86,7 +86,7 @@ The detailed diagram, with the internals of the agent service and the learning l
 | User preferences | Postgres | Section 5.4. |
 | Golden trios | Cloud Storage and Postgres | Files are the source of truth. Embeddings and metadata sit in Postgres for search. |
 | Persona, metrics, scopes | Config store | Versioned, so a bad change can be rolled back. |
-| Traces and logs | Langfuse and Cloud Monitoring | Prompts and results are stored with the same masking rules as the output. |
+| Traces and logs | Cloud Trace and Cloud Logging | Prompts and results are stored with the same masking rules as the output. |
 
 ## 5. How each requirement is handled
 
@@ -96,7 +96,7 @@ A trio is a question, the SQL queries an analyst used and the analyst's report.
 The agent uses trios to learn which metrics to look at, how to break a problem down and how to word conclusions, and it always writes fresh SQL for the new question.
 
 - **At question time:** hybrid retrieval in one Postgres query. The question is embedded and matched by meaning with `pgvector`, and matched by exact words (metric names, product categories, places) with Postgres full-text search. The two rankings are merged with reciprocal rank fusion and the top three approved trios are placed in the prompt as guidance, with the instruction not to copy them.
-- **Measuring retrieval:** a test set of questions, each with the trio an analyst would pick, measures how often the right trio is in the top three. A reranking model over the top twenty is added only if this shows the right trio is often found but ranked too low.
+- **Measuring retrieval:** a test set of questions, each with the trio an analyst would pick, measures how often the right trio is in the top three. This is measured during development, and a reranking model over the top twenty is added only if it shows the right trio is often found but ranked too low.
 - **Filtering:** trios are filtered by the user's permissions before they reach the prompt, because a report about a product the user cannot see would leak it.
 - **Prototype:** six invented trios and a word-overlap ranking. Only the retrieval method differs from production.
 - **Adding:** a new trio goes through validation (its SQL parses and runs, its numbers match its report, no personal data), then analyst approval, then it is written to the bucket, embedded and indexed.
@@ -110,7 +110,11 @@ The agent uses trios to learn which metrics to look at, how to break a problem d
 Security is enforced by code around the model, never by the prompt.
 
 - **Input safety:** only analysis questions are answered. Other requests, attempts to reveal instructions and attempts to widen access are refused.
+- **Secrets in the input:** before the user's message reaches Gemini, the traces or a saved report, pattern rules redact card numbers (checked with the Luhn digit, so order numbers are kept), IBANs, common API key and token formats, JWTs, emails and phone numbers. The user is told what was removed.
 - **SQL guardrails:** one `SELECT` on the four tables only. Personal columns (names, emails, street address, postal code, coordinates) are refused wherever they appear. City, state and country are allowed only as grouping dimensions of aggregates.
+- **No customer next to a place:** `user_id` and geography never appear in the same query, in the selected columns, a filter, a grouping or a join. "Top customers in Texas" would place those customers in Texas even without a state column.
+- **Minimum group size:** an aggregate grouped by geography is returned only for groups of at least 10 customers. A city with one customer would otherwise link a total to a single person.
+- **Accepted residual risk:** `user_id` is pseudonymous, and no SQL rule stops every inference across several queries. These rules close the direct paths, and the remaining risk is accepted for aggregate analysis.
 - **Product scoping:** after the model writes the SQL, `products` and `order_items` are replaced by filtered subqueries that contain only the user's categories. The model cannot widen this, whatever it writes.
 - **Prototype limit:** the code rewrite does not product-scope `orders` and `users`, so an order count across all products could be inferred. In production row-level access policies on `orders`, `users` and `order_items` scope them too.
 - **Result masking:** values that look like emails or phone numbers are redacted from returned rows, as a second line of defense.
@@ -126,11 +130,11 @@ No single technique is enough, so each layer covers what the one before can miss
 | Layer | What it does | Prototype | Production |
 | ----- | ------------ | --------- | ---------- |
 | 1. Structure | Blocked columns, geography only inside aggregates, product scope | Yes | Yes, plus PII-free views or policy tags and row-level access policies in BigQuery, enforced on the executive's own identity |
-| 2. Pattern rules | Emails and phone numbers are redacted from result rows and from everything written to a trace | Yes | Yes |
-| 3. NER scrubber | A model detects names, addresses and identifiers in free text: the user's messages, the model's answers, the traces | No | Yes, running inside the agent service |
+| 2. Pattern rules | Emails and phone numbers are redacted from result rows and from everything written to a trace. Card numbers, IBANs, keys and tokens are redacted from the user's message | Rows and traces | Rows, traces and the user's message |
+| 3. NER scrubber | A model detects names, addresses and identifiers in free text: the model's answers and the traces | No | Yes, running inside the agent service, once the data has free-text columns |
 | 4. Managed inspection | Cloud Sensitive Data Protection scans stored reports and the log pipeline | No | Optional second opinion |
 
-Layer 3 is needed because free text appears even when the columns are safe: a user can type a customer's name, the model can quote one, and a real retail database often has notes or reviews.
+Layer 3 covers free text, which appears even when the columns are safe: a user can type a customer's name that then lands in a trace, the model can quote one, and a real retail database often has notes or reviews. The user's message is not scrubbed by the model before planning: name columns are already refused, so a typed name cannot reach customer data. `thelook_ecommerce` has no free-text columns, so layer 3 is built when the data has them.
 The options we would evaluate, all able to run locally so no personal data leaves the service:
 
 - **Microsoft Presidio:** an open-source analyzer and anonymizer that combines pattern recognizers with spaCy named-entity models. It is the default candidate, because replacing a value with a label such as `<PERSON>` is built in.
@@ -145,13 +149,14 @@ We keep the lightest option that meets the targets, and the deterministic rules 
 
 The database is read-only, but the saved reports library can be changed, so deletion is the one destructive action.
 
-- **No direct path:** the model has no way to delete. It can call a "request delete" tool, which only lists what would be removed.
-- **Pause:** the confirmation is a graph `interrupt`. The state is saved and the graph resumes with the user's next message, so the answer binds to the pending deletion of that conversation.
+- **No direct path:** the model has no way to delete. It can only choose the delete intent, which lists what would be removed.
+- **Matching:** "reports mentioning Client X" is a case-insensitive text match on the title and body of the user's reports, with no model involved. A wider match than intended is visible in the list before anything is deleted.
+- **Pause:** the pending deletion row in Postgres is the pause. The web chat shows it as a card with Delete and Cancel buttons, and the user can keep asking questions while it is open. A button sends the pending deletion id to the service, which runs the deletion in code with no model call.
 - **Confirmation:** the user sees the list ("these 4 reports mention Client X") and must confirm. The confirmation deletes exactly the set that was listed, so reports created in between are untouched.
 - **Safeguards:** a pending deletion is single-use, expires after 10 minutes and works only for the user who requested it.
 - **Ownership:** a user can only match, delete or restore their own reports.
 - **Soft delete:** deleted reports stay recoverable for 30 days and are purged after that.
-- **UX:** one short prompt listing the reports, answered with a single word. The same flow serves "delete all reports mentioning Client X" and "delete all reports from this conversation".
+- **UX:** one card listing the reports, answered with one click. The same flow serves "delete all reports mentioning Client X" and "delete all reports from this conversation".
 
 ### 5.4 Continuous improvement
 
@@ -232,7 +237,7 @@ Given a bad answer, one search by trace id shows where it went wrong.
 A LangGraph callback writes one JSON line per node (duration and outcome), per query (SQL and row count), per retry (reason) and per model call (model, input and output tokens, and the cost from a price table in the config). Each turn has a trace id. Every string written to the trace passes through the PII masking first. With `TRACE_VERBOSE=1` the trace also records each prompt, each raw model answer and the masked rows of each query, for debugging. The chat command `/trace` shows the last turn, and `python -m retail_analyst.observability` summarises failure rate, retries, latency, tokens and cost.
 
 **Production.**
-The service is instrumented with OpenTelemetry. Traces go to Langfuse for the model-specific views and to Cloud Monitoring for alerts such as error-rate and latency thresholds.
+The service is instrumented with OpenTelemetry. Traces go to Cloud Trace, structured logs with prompts, replies and token counts go to Cloud Logging, and metrics go to Cloud Monitoring for dashboards and alerts such as error-rate and latency thresholds. Everything stays in the project, after the PII scrubber.
 
 ### 5.8 Agility (persona management)
 
@@ -244,10 +249,12 @@ The prototype already reads the tone from a file at every turn.
 
 ## 6. Extending the system
 
-New capabilities are tools behind one interface: a name, a description, an input schema and a function that receives the trusted user context.
-Charts, email delivery and web search would each be one more tool.
-The guardrail layer sits around the tools, so a new tool declares what it reads and writes and inherits the confirmation rule if it is destructive or sends something outside.
-Sending a report by email, for example, would use the same request-then-confirm flow as deletion.
+The agent is an intent router: `plan` picks one intent, and code runs a fixed path for it.
+The model is free inside an analysis, where `analyze` decides on its own whether it needs follow-up queries, and code decides every action.
+
+- **Why a router:** a destructive or outbound action always goes through request-then-confirm, because the code chooses the path and the model cannot skip a step. A turn has a known number of model calls, so cost and latency are bounded. Each intent is a fixed path that is tested end to end.
+- **Adding a capability:** a new intent, its node and its edges in the graph. Charts, email delivery and web search would each be one. A capability that deletes or sends something outside reuses the request-then-confirm path of deletion.
+- **Limit:** one intent per turn, so "analyse X, then save it as a report" takes two turns.
 
 ## 7. Production deployment
 
@@ -297,9 +304,10 @@ An image never contains a secret: the build copies only code and configuration, 
 | Product scope | Query rewrite in code | Same, plus row-level access policies per Google group and PII-free views in BigQuery |
 | LLM | Gemini through an AI Studio key, with a fallback model | Gemini on Vertex AI |
 | Agent state | In-memory checkpointer, one process | Postgres checkpointer |
-| Golden retrieval | Word overlap over a few files | `pgvector` over an approved bucket |
+| Golden retrieval | Word overlap over a few files | Hybrid `pgvector` and full-text search over an approved bucket |
 | Result display | Answer text plus tables in the terminal, `/export` writes CSV files | Same, rendered in the web chat with download |
-| PII beyond structure | Pattern rules on rows and traces | Adds the NER scrubber and optional managed inspection |
-| Observability | Local JSON log with tokens and cost per call, trace command | OpenTelemetry to Langfuse and Cloud Monitoring |
+| PII beyond structure | Pattern rules on rows and traces | Adds secret redaction on the user's message, the `user_id` and geography rule, the minimum group size, the NER scrubber once there is free text, and optional managed inspection |
+| Deletion confirmation | The graph pauses with an `interrupt` and the user types yes or no. Any other answer repeats the question. | A card with Delete and Cancel buttons; the user can keep asking questions while it is open |
+| Observability | Local JSON log with tokens and cost per call, trace command | OpenTelemetry to Cloud Trace, Cloud Logging and Cloud Monitoring |
 | Persona | File read at every turn | Versioned store with an admin page |
 | Preferences, learning loop | Design only | Postgres profile and offline loop |

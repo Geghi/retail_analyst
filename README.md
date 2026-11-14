@@ -185,7 +185,7 @@ flowchart LR
   AG --> CFG[("Config store")]
   GCS[("Golden bucket - Cloud Storage")] -->|"ingestion job"| PG
   AG --> OBS["OpenTelemetry"]
-  OBS --> LF["Langfuse"]
+  OBS --> CT["Cloud Trace and Cloud Logging"]
   OBS --> MON["Cloud Monitoring"]
 ```
 

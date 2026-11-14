@@ -13,12 +13,12 @@ flowchart LR
     REFUSE["refuse: off-topic or personal data"]
     SAVE["save_report"]
     REQDEL["request_delete: list matching reports"]
-    CONFIRM["confirm: graph pauses until the user answers yes or no"]
+    CONFIRM["confirm: Delete or Cancel on a card, user can keep asking meanwhile"]
     GIVEUP["give_up: friendly message after the correction limit"]
     CKPT["Checkpointer: one thread per conversation"]
     LLMC["Gemini client: timeout, retries, fallback model, circuit breaker"]
     SCRUB["PII scrubber: pattern rules and NER model, on rows and on traces"]
-    TOOLS["Tool registry: charts, email, web search (future)"]
+    TOOLS["Future intents: charts, email, web search"]
     BQC["BigQueryClient: dry-run byte cap, typed errors, JSON rows"]
   end
   UI -->|"HTTPS, Google ID token + BigQuery access token, IAP on the Workspace domain"| AUTH
@@ -31,7 +31,7 @@ flowchart LR
   PLAN -->|"delete reports"| REQDEL --> CONFIRM
   RUN -->|"rows"| SCRUB
   SCRUB -->|"masked rows"| ANA
-  ANA -.->|"new tools"| TOOLS
+  PLAN -.->|"new intents"| TOOLS
   TOOLS -.->|"send or delete: request, then confirm"| CONFIRM
   RUN -->|"error: up to 2 corrections"| PLAN
   RUN -->|"limit reached"| GIVEUP
@@ -41,7 +41,6 @@ flowchart LR
   LLMC -->|"HTTPS, Vertex AI API"| GEM["Gemini - Vertex AI"]
   RUN -->|"retried 3 times if the warehouse is unavailable"| BQC
   BQC -->|"BigQuery API with the user's token, dry run first, job labels"| BQ[("BigQuery: PII-free views + row-level security per Google group")]
-  CONFIRM -.-> CKPT
 
   subgraph Data["State"]
     PG[("Cloud SQL Postgres + pgvector: reports, pending deletions, checkpoints, preferences, knowledge index")]
@@ -65,7 +64,7 @@ flowchart LR
   EVAL -->|"offline service account, PII-free views only"| BQ
 
   Agent -->|"OTLP, scrubbed"| OBS["OpenTelemetry traces, metrics, logs"]
-  OBS --> LF["Langfuse: LLM traces, tokens, cost, evals"]
+  OBS --> CT["Cloud Trace and Cloud Logging: traces, prompts, tokens, cost"]
   OBS --> MON["Cloud Monitoring: alerts, dashboards"]
   OBS --> FB
 
