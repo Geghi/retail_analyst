@@ -56,7 +56,7 @@ The detailed diagram, with the internals of the agent service and the learning l
 | LLM | Gemini through Vertex AI in production, AI Studio key in the prototype | The brief asks for Gemini. Vertex AI adds IAM, quotas per project and regional control. A Flash-class model plans the queries and writes the answer, a Flash-Lite model is the fallback, and a Pro-class model is used for long reports only if the evaluation set shows a gain. Model names are configuration, never code. |
 | Agent framework | LangGraph state graph | The flow has branches (analysis, report, delete, direct reply), a correction loop and a pause for human confirmation. LangGraph provides these as primitives: conditional edges, per-node retry policies, `interrupt` for the confirmation, a checkpointer that keeps each conversation's state by thread id, and callbacks for tracing. |
 | Warehouse | BigQuery through a `BigQueryClient`, each job run with the executive's own token on PII-free views with row-level security | The data already lives there. The client runs a dry run before every query, refuses queries above the byte cap, labels each job with the trace id and user id, maps Google errors to typed errors and returns JSON-friendly rows. Executives can read the views and cannot write. |
-| State | Cloud SQL Postgres with the `pgvector` extension | Saved reports, pending deletions, conversation checkpoints, preferences and the knowledge index in one engine. |
+| State | Cloud SQL Postgres with the `pgvector` extension | Saved reports, pending deletions, conversation checkpoints, preferences and the knowledge index in one engine. The expected knowledge base is hundreds to a few thousand trios, well within `pgvector`, and the permission filter on trios is a plain `WHERE` in the same query. |
 | Golden bucket | Cloud Storage, versioned | The source of truth for the analysts' trios. Files are reviewable and recoverable. |
 | Config store | Versioned documents in a bucket or database | Persona text, metric definitions and user scopes change without a deploy. |
 | Secrets | Secret Manager | Keys never live in images or repositories. |
@@ -254,8 +254,20 @@ Sending a report by email, for example, would use the same request-then-confirm 
 - **Networking:** private connectivity to Cloud SQL, outbound only to Vertex AI and BigQuery.
 - **Environments:** development, staging and production, each with its own project and service accounts.
 - **Delivery:** the container is built once and promoted. The evaluation set is the gate between staging and production.
-- **Scaling:** stateless instances, so scaling is by request count. BigQuery cost is controlled per query by the dry-run byte cap, and per user because jobs run as the executive: BigQuery custom quotas cap the bytes each user can scan per day, and billing shows the cost per user.
+- **Scaling:** stateless instances, so scaling is by request count. One instance is always running (`min-instances=1`) so the first question of the day does not wait for a cold start. Development and staging scale to zero. BigQuery cost is controlled per query by the dry-run byte cap, and per user because jobs run as the executive: BigQuery custom quotas cap the bytes each user can scan per day, and billing shows the cost per user.
 - **Cost levers:** a cheaper model for planning and routing, caching of repeated aggregate queries for a short time, and the byte cap.
+
+### Latency targets
+
+Measured at p95: 95 out of 100 requests finish within the target.
+
+| What | Target |
+| ---- | ------ |
+| First progress update streamed to the user ("planning", "running query") | 3 s |
+| Full answer to a simple question (one plan, one query, one analysis) | 20 s |
+| Report with follow-up queries | 60 s |
+
+A target that is missed for several minutes raises an alert in Cloud Monitoring.
 
 ### Secrets and identity
 
